@@ -1,7 +1,13 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma schema for Attesta.
+//
+// Provider is sqlite for local dev (no external DB provisioning needed).
+// Connection url lives in prisma.config.ts, read from DATABASE_URL.
+//
+// SQLite has no native enum support in Prisma, so fields that are
+// conceptually enums are typed String with the allowed values documented
+// in a comment. Swapping to Postgres later means: change provider to
+// "postgresql", reintroduce real `enum` blocks below, and change these
+// fields' types to those enums — no other structural changes needed.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,5 +15,86 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  companyName String
+  createdAt   DateTime @default(now())
+
+  meetingRequests MeetingRequest[]
+}
+
+model MeetingRequest {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  company        String
+  region         String
+  governingBody  String
+  meetingDate    DateTime
+  title          String
+  outputLanguage String
+  tier           String // "ESSENTIAL" | "SCOPE" | "PREMIUM"
+  status         String // "DRAFT" | "SUBMITTED" | "TRANSCRIBING" | "GENERATING" | "IN_REVIEW" | "LOCKED" | "DISPATCHED"
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sourceFile SourceFile?
+  report     Report?
+}
+
+model SourceFile {
+  id               String   @id @default(cuid())
+  meetingRequestId String   @unique
+  meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id])
+  type             String // "AUDIO" | "VIDEO" | "DOCX" | "PDF"
+  fileName         String
+  storageUrl       String
+  uploadedAt       DateTime @default(now())
+
+  transcript Transcript?
+}
+
+model Transcript {
+  id            String   @id @default(cuid())
+  sourceFileId  String   @unique
+  sourceFile    SourceFile @relation(fields: [sourceFileId], references: [id])
+  rawText       String
+  speakerLabels Json // [{ speakerId, name, segments: [{ start, end, text }] }]
+  source        String // "DEEPGRAM" | "MANUAL"
+  createdAt     DateTime @default(now())
+}
+
+model Report {
+  id               String   @id @default(cuid())
+  meetingRequestId String   @unique
+  meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id])
+  tier             String // "ESSENTIAL" | "SCOPE" | "PREMIUM"
+  outputLanguage   String
+  content          Json // { coverInfo, executiveSummary, attendance, agendaItems, discussionLog, decisions, votes, proceduralNotes, closingNotes }
+  speakerAnalytics Json // [{ speakerName, talkTimeSeconds, contributionCount, onTopicScore }]
+  numericalData    Json // [{ label, value, context }]
+  status           String // "DRAFT" | "LOCKED"
+  lockedAt         DateTime?
+  lockedBy         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  complianceFindings ComplianceFinding[]
+}
+
+model ComplianceFinding {
+  id                String @id @default(cuid())
+  reportId          String
+  report            Report @relation(fields: [reportId], references: [id])
+  category          String // "RISK" | "MISSING_DOCUMENT" | "COMPLIANCE_REFERENCE" | "RECOMMENDATION" | "COMPLIANT"
+  riskLevel         String // "CRITICAL" | "HIGH" | "MEDIUM" | "ADVISORY" | "COMPLIANT"
+  description       String
+  ruleReference     String?
+  impactDescription String?
+  confidence        Int // 0-100
 }
