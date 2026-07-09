@@ -43,3 +43,6 @@ next-env.d.ts
 /dev.db-journal
 /prisma/*.db
 /prisma/*.db-journal
+
+# uploaded source files (local dev storage)
+/uploads

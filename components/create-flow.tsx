@@ -1,0 +1,761 @@
+"use client";
+
+import { useReducer, useRef, useState } from "react";
+import Link from "next/link";
+import { Container } from "@/components/container";
+import { Eyebrow } from "@/components/eyebrow";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  createDraftMeetingRequest,
+  signUp,
+  submitMeetingRequest,
+  uploadSourceFile,
+} from "@/app/create/actions";
+
+type Step = 1 | 2 | 3 | 4 | "done";
+
+type Tier = "ESSENTIAL" | "SCOPE" | "PREMIUM";
+
+type FlowState = {
+  step: Step;
+  user: { id: string; email: string; companyName: string } | null;
+  meetingRequestId: string | null;
+  email: string;
+  companyName: string;
+  company: string;
+  region: string;
+  governingBody: string;
+  meetingDate: string;
+  title: string;
+  outputLanguage: string;
+  sourceFile: { fileName: string; type: string } | null;
+  tier: Tier | null;
+  notes: string;
+  submitting: boolean;
+  error: string | null;
+};
+
+type StringField =
+  | "email"
+  | "companyName"
+  | "company"
+  | "region"
+  | "governingBody"
+  | "meetingDate"
+  | "title"
+  | "outputLanguage"
+  | "notes";
+
+type Action =
+  | { type: "SET_FIELD"; field: StringField; value: string }
+  | { type: "SET_ERROR"; error: string | null }
+  | { type: "SET_SUBMITTING"; submitting: boolean }
+  | {
+      type: "SIGNED_UP";
+      user: { id: string; email: string; companyName: string };
+    }
+  | { type: "DRAFT_CREATED"; meetingRequestId: string }
+  | { type: "FILE_UPLOADED"; fileName: string; fileType: string }
+  | { type: "SET_TIER"; tier: Tier }
+  | { type: "GO_TO"; step: Step }
+  | { type: "RESET_SOURCE_FILE" }
+  | { type: "SUBMITTED" };
+
+function reducer(state: FlowState, action: Action): FlowState {
+  switch (action.type) {
+    case "SET_FIELD":
+      return { ...state, [action.field]: action.value, error: null };
+    case "SET_ERROR":
+      return { ...state, error: action.error, submitting: false };
+    case "SET_SUBMITTING":
+      return { ...state, submitting: action.submitting, error: null };
+    case "SIGNED_UP":
+      return {
+        ...state,
+        user: action.user,
+        company: action.user.companyName,
+        step: 2,
+        submitting: false,
+        error: null,
+      };
+    case "DRAFT_CREATED":
+      return {
+        ...state,
+        meetingRequestId: action.meetingRequestId,
+        step: 3,
+        submitting: false,
+        error: null,
+      };
+    case "FILE_UPLOADED":
+      return {
+        ...state,
+        sourceFile: { fileName: action.fileName, type: action.fileType },
+        submitting: false,
+        error: null,
+      };
+    case "SET_TIER":
+      return { ...state, tier: action.tier };
+    case "GO_TO":
+      return { ...state, step: action.step, error: null };
+    case "RESET_SOURCE_FILE":
+      return { ...state, sourceFile: null };
+    case "SUBMITTED":
+      return { ...state, step: "done", submitting: false, error: null };
+    default:
+      return state;
+  }
+}
+
+const REGIONS = [
+  { value: "France", live: true },
+  { value: "Germany", live: false },
+  { value: "Belgium", live: false },
+  { value: "Netherlands", live: false },
+];
+
+const GOVERNING_BODIES = [
+  { value: "CSE", label: "CSE — works council" },
+  { value: "CSSCT", label: "CSSCT — health & safety" },
+  { value: "HR", label: "HR — internal meeting" },
+  { value: "AG", label: "AG — general assembly" },
+];
+
+const OUTPUT_LANGUAGES = [
+  "English",
+  "Français",
+  "Deutsch",
+  "Español",
+  "Italiano",
+  "Nederlands",
+  "Português",
+  "Polski",
+];
+
+const TIERS: { value: Tier; name: string; features: string[] }[] = [
+  {
+    value: "ESSENTIAL",
+    name: "Essential",
+    features: [
+      "Chronological summary",
+      "Basic compliance check",
+      "Speaker-name correction only",
+      "PDF output",
+    ],
+  },
+  {
+    value: "SCOPE",
+    name: "Scope",
+    features: [
+      "Agenda-based structure",
+      "Full compliance audit",
+      "Full text + speaker edits",
+      "PDF + DOCX + decision log",
+    ],
+  },
+  {
+    value: "PREMIUM",
+    name: "Premium",
+    features: [
+      "Formal legal layout",
+      "Clause-by-clause review",
+      "Human reviewer pass (optional)",
+      "Signed + branded + audit-trail",
+    ],
+  },
+];
+
+const ACCEPTED_EXTENSIONS = [".mp3", ".mp4", ".wav", ".m4a", ".docx", ".pdf"];
+
+function initialState(
+  initialUser: { id: string; email: string; companyName: string } | null
+): FlowState {
+  return {
+    step: initialUser ? 2 : 1,
+    user: initialUser,
+    meetingRequestId: null,
+    email: "",
+    companyName: "",
+    company: initialUser?.companyName ?? "",
+    region: "",
+    governingBody: "",
+    meetingDate: "",
+    title: "",
+    outputLanguage: "",
+    sourceFile: null,
+    tier: null,
+    notes: "",
+    submitting: false,
+    error: null,
+  };
+}
+
+export function CreateFlow({
+  initialUser,
+}: {
+  initialUser: { id: string; email: string; companyName: string } | null;
+}) {
+  const [state, dispatch] = useReducer(reducer, initialUser, initialState);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const numericStep = state.step === "done" ? 4 : state.step;
+
+  async function handleSignUp() {
+    dispatch({ type: "SET_SUBMITTING", submitting: true });
+    const result = await signUp({
+      email: state.email,
+      companyName: state.companyName,
+    });
+    if (!result.ok) {
+      dispatch({ type: "SET_ERROR", error: result.error });
+      return;
+    }
+    dispatch({ type: "SIGNED_UP", user: result.data });
+  }
+
+  async function handleCreateDraft() {
+    dispatch({ type: "SET_SUBMITTING", submitting: true });
+    const result = await createDraftMeetingRequest({
+      company: state.company,
+      region: state.region,
+      governingBody: state.governingBody,
+      meetingDate: state.meetingDate,
+      title: state.title,
+      outputLanguage: state.outputLanguage,
+    });
+    if (!result.ok) {
+      dispatch({ type: "SET_ERROR", error: result.error });
+      return;
+    }
+    dispatch({ type: "DRAFT_CREATED", meetingRequestId: result.data.id });
+  }
+
+  async function handleFile(file: File) {
+    if (!state.meetingRequestId) return;
+    const extension = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.includes(extension)) {
+      dispatch({
+        type: "SET_ERROR",
+        error: "Unsupported file type. Use MP3, MP4, WAV, M4A, DOCX or PDF.",
+      });
+      return;
+    }
+
+    dispatch({ type: "SET_SUBMITTING", submitting: true });
+    const formData = new FormData();
+    formData.set("meetingRequestId", state.meetingRequestId);
+    formData.set("file", file);
+    const result = await uploadSourceFile(formData);
+    if (!result.ok) {
+      dispatch({ type: "SET_ERROR", error: result.error });
+      return;
+    }
+    dispatch({
+      type: "FILE_UPLOADED",
+      fileName: result.data.fileName,
+      fileType: result.data.type,
+    });
+  }
+
+  async function handleSubmit() {
+    if (!state.meetingRequestId || !state.tier) return;
+    dispatch({ type: "SET_SUBMITTING", submitting: true });
+    const result = await submitMeetingRequest({
+      meetingRequestId: state.meetingRequestId,
+      tier: state.tier,
+      notes: state.notes,
+    });
+    if (!result.ok) {
+      dispatch({ type: "SET_ERROR", error: result.error });
+      return;
+    }
+    dispatch({ type: "SUBMITTED" });
+  }
+
+  const step2Valid =
+    state.company.trim() &&
+    state.region === "France" &&
+    state.governingBody &&
+    state.meetingDate &&
+    state.title.trim() &&
+    state.outputLanguage;
+
+  const step1Valid = state.email.includes("@") && state.companyName.trim();
+
+  if (state.step === "done") {
+    return (
+      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+        <Eyebrow>Request received</Eyebrow>
+        <h1 className="mt-5 font-serif text-4xl text-cream-100 md:text-5xl">
+          We&apos;ll be in touch.
+        </h1>
+        <p className="mt-4 max-w-md text-[15px] leading-relaxed text-cream-300">
+          Your request for <span className="text-cream-100">{state.title}</span>{" "}
+          is in the queue. A specialist reviews the transcript, runs the
+          compliance audit, and locks the report before it reaches your
+          account.
+        </p>
+        <Button asChild className="mt-8">
+          <Link href="/">Back to home</Link>
+        </Button>
+      </Container>
+    );
+  }
+
+  return (
+    <Container>
+      <div className="flex items-center justify-between">
+        <Eyebrow>Create your report</Eyebrow>
+        <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500">
+          Step {numericStep} / 4
+        </p>
+      </div>
+
+      {state.step === 1 && (
+        <div className="mt-8 max-w-md">
+          <h1 className="font-serif text-3xl text-cream-100">Sign up</h1>
+          <p className="mt-3 text-[14.5px] text-cream-300">
+            No password needed yet — this just ties your requests to an
+            accountable owner.
+          </p>
+
+          <div className="mt-8 space-y-4 rounded-md border border-cream-200/10 bg-ink-850 p-8">
+            <LabeledInput
+              label="Email"
+              type="email"
+              value={state.email}
+              onChange={(v) =>
+                dispatch({ type: "SET_FIELD", field: "email", value: v })
+              }
+              placeholder="you@company.com"
+            />
+            <LabeledInput
+              label="Company name"
+              value={state.companyName}
+              onChange={(v) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "companyName",
+                  value: v,
+                })
+              }
+              placeholder="Nordane SA"
+            />
+
+            {state.error && <ErrorText>{state.error}</ErrorText>}
+
+            <Button
+              className="w-full"
+              disabled={!step1Valid || state.submitting}
+              onClick={handleSignUp}
+            >
+              {state.submitting ? "Continuing…" : "Continue"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {state.step === 2 && (
+        <div className="mt-14 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-md border border-cream-200/10 bg-ink-850 p-8">
+            <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-rust-400">
+              Step 2 · About your meeting
+            </p>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <LabeledInput
+                label="Company"
+                value={state.company}
+                onChange={(v) =>
+                  dispatch({ type: "SET_FIELD", field: "company", value: v })
+                }
+              />
+              <LabeledInput
+                label="Meeting title"
+                value={state.title}
+                onChange={(v) =>
+                  dispatch({ type: "SET_FIELD", field: "title", value: v })
+                }
+                placeholder="September ordinary session"
+              />
+            </div>
+
+            <div className="mt-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-cream-500">
+                Region
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {REGIONS.map((r) => {
+                  const selected = state.region === r.value;
+                  return (
+                    <button
+                      key={r.value}
+                      type="button"
+                      disabled={!r.live}
+                      onClick={() =>
+                        dispatch({
+                          type: "SET_FIELD",
+                          field: "region",
+                          value: r.value,
+                        })
+                      }
+                      className={cn(
+                        "rounded-full border px-3 py-1 font-mono text-[11px] transition-colors",
+                        selected
+                          ? "border-rust-400/40 bg-rust-400/10 text-rust-400"
+                          : r.live
+                            ? "border-cream-200/15 text-cream-300 hover:border-cream-200/30"
+                            : "cursor-not-allowed border-cream-200/10 text-cream-500 opacity-60"
+                      )}
+                    >
+                      {r.value}
+                      {!r.live && " — coming soon"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-cream-500">
+                Governing body
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {GOVERNING_BODIES.map((g) => {
+                  const selected = state.governingBody === g.value;
+                  return (
+                    <button
+                      key={g.value}
+                      type="button"
+                      onClick={() =>
+                        dispatch({
+                          type: "SET_FIELD",
+                          field: "governingBody",
+                          value: g.value,
+                        })
+                      }
+                      className={cn(
+                        "rounded-full border px-3 py-1 font-mono text-[11px] transition-colors",
+                        selected
+                          ? "border-rust-400/40 bg-rust-400/10 text-rust-400"
+                          : "border-cream-200/15 text-cream-300 hover:border-cream-200/30"
+                      )}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <LabeledInput
+                label="Meeting date"
+                type="date"
+                value={state.meetingDate}
+                onChange={(v) =>
+                  dispatch({
+                    type: "SET_FIELD",
+                    field: "meetingDate",
+                    value: v,
+                  })
+                }
+              />
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-cream-500">
+                  Report language
+                </p>
+                <select
+                  value={state.outputLanguage}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "outputLanguage",
+                      value: e.target.value,
+                    })
+                  }
+                  className="mt-1.5 w-full rounded border border-cream-200/15 bg-ink-900 px-3 py-2 text-[13px] text-cream-100"
+                >
+                  <option value="">Select a language</option>
+                  {OUTPUT_LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <p className="mt-6 font-mono text-[11px] text-cream-500">
+              Selection: {state.region || "—"} → {state.governingBody || "—"} →{" "}
+              {state.outputLanguage || "—"}
+            </p>
+
+            {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
+
+            <Button
+              className="mt-6 w-full"
+              disabled={!step2Valid || state.submitting}
+              onClick={handleCreateDraft}
+            >
+              {state.submitting ? "Continuing…" : "Continue"}
+            </Button>
+          </div>
+
+          <SummaryCard state={state} />
+        </div>
+      )}
+
+      {state.step === 3 && (
+        <div className="mt-14 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-md border border-cream-200/10 bg-ink-850 p-8">
+            <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-rust-400">
+              Step 3 · Source file
+            </p>
+
+            {!state.sourceFile ? (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) void handleFile(file);
+                }}
+                className={cn(
+                  "mt-4 rounded-md border-2 border-dashed p-10 text-center transition-colors",
+                  dragging
+                    ? "border-rust-400/60 bg-rust-400/5"
+                    : "border-cream-200/15"
+                )}
+              >
+                <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-400">
+                  {state.submitting
+                    ? "Uploading…"
+                    : "Drag a file here, or"}
+                </p>
+                {!state.submitting && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mt-2 font-mono text-[13px] text-rust-400 underline underline-offset-4"
+                  >
+                    browse your files
+                  </button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ACCEPTED_EXTENSIONS.join(",")}
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleFile(file);
+                  }}
+                />
+                <p className="mt-4 font-mono text-[10.5px] text-cream-500">
+                  MP3 · MP4 · WAV · M4A · DOCX · PDF
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <div className="flex items-center justify-between rounded border border-cream-200/10 px-4 py-3">
+                  <span className="text-[13px] text-cream-200">
+                    {state.sourceFile.fileName}
+                  </span>
+                  <span className="font-mono text-[11px] text-cream-500">
+                    {state.sourceFile.type}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: "RESET_SOURCE_FILE" })}
+                  className="mt-2 font-mono text-[10.5px] text-cream-500 underline underline-offset-4 hover:text-cream-300"
+                >
+                  Replace file
+                </button>
+              </div>
+            )}
+
+            {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
+
+            <Button
+              className="mt-6 w-full"
+              disabled={!state.sourceFile || state.submitting}
+              onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+            >
+              Continue
+            </Button>
+          </div>
+
+          <SummaryCard state={state} />
+        </div>
+      )}
+
+      {state.step === 4 && (
+        <div className="mt-14 max-w-3xl">
+          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-rust-400">
+            Step 4 · Tier &amp; notes
+          </p>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {TIERS.map((t) => {
+              const selected = state.tier === t.value;
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => dispatch({ type: "SET_TIER", tier: t.value })}
+                  className={cn(
+                    "rounded-md border p-6 text-left transition-colors",
+                    selected
+                      ? "border-rust-400/40 bg-ink-950"
+                      : "border-cream-200/10 bg-ink-850 hover:border-cream-200/20"
+                  )}
+                >
+                  <h3 className="font-serif text-lg text-cream-100">
+                    {t.name}
+                  </h3>
+                  <ul className="mt-3 space-y-1.5">
+                    {t.features.map((f) => (
+                      <li
+                        key={f}
+                        className="flex items-start gap-2 text-[12.5px] leading-relaxed text-cream-300"
+                      >
+                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-rust-400" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-cream-500">
+              Notes for the reviewer (optional)
+            </p>
+            <textarea
+              value={state.notes}
+              onChange={(e) =>
+                dispatch({ type: "SET_FIELD", field: "notes", value: e.target.value })
+              }
+              rows={4}
+              className="mt-1.5 w-full rounded border border-cream-200/15 bg-ink-900 px-3 py-2 text-[13px] text-cream-100"
+              placeholder="Anything the reviewer should know about this session…"
+            />
+          </div>
+
+          {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
+
+          <Button
+            className="mt-6"
+            disabled={!state.tier || state.submitting}
+            onClick={handleSubmit}
+          >
+            {state.submitting ? "Submitting…" : "Submit request"}
+          </Button>
+        </div>
+      )}
+    </Container>
+  );
+}
+
+function SummaryCard({ state }: { state: FlowState }) {
+  return (
+    <div className="rounded-md bg-paper-500 p-8 text-slate-900">
+      <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
+        Summary report · builds as you type
+      </p>
+      <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
+        Minutes · {state.governingBody || "—"}
+      </p>
+      <h3 className="mt-1 font-serif text-lg text-slate-900">
+        {state.title || "Your meeting title"}
+      </h3>
+      <p className="mt-1 text-[12.5px] text-slate-600">
+        {state.company || "Your company"}
+      </p>
+
+      <div className="mt-8 space-y-2 border-t border-slate-900/10 pt-4">
+        {[
+          ["Region", state.region || "—"],
+          ["Governing body", state.governingBody || "—"],
+          ["Language", state.outputLanguage || "—"],
+          [
+            "Date",
+            state.meetingDate
+              ? new Date(state.meetingDate).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })
+              : "—",
+          ],
+        ].map(([k, v]) => (
+          <div key={k} className="flex justify-between text-[11px]">
+            <span className="font-mono uppercase tracking-[0.08em] text-slate-400">
+              {k}
+            </span>
+            <span className="font-semibold text-slate-900">{v}</span>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-8 font-mono text-[9px] uppercase tracking-[0.1em] text-slate-400">
+        Attesta · Draft cover
+      </p>
+
+      <p className="mt-10 text-[13px] leading-relaxed text-slate-500">
+        This is a preview of your report cover. It updates as you type.
+      </p>
+    </div>
+  );
+}
+
+function LabeledInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-cream-500">
+        {label}
+      </p>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1.5 w-full rounded border border-cream-200/15 bg-ink-900 px-3 py-2 text-[13px] text-cream-100"
+      />
+    </div>
+  );
+}
+
+function ErrorText({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <p className={cn("text-[13px] text-rust-400", className)}>{children}</p>
+  );
+}

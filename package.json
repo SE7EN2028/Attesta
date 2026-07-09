@@ -9,12 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@deepgram/sdk": "^5.5.0",
     "@prisma/adapter-better-sqlite3": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.23.0",
+    "mammoth": "^1.12.0",
     "next": "14.2.35",
+    "pdf-parse": "^2.4.5",
     "radix-ui": "^1.6.2",
     "react": "^18",
     "react-dom": "^18",

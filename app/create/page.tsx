@@ -1,17 +1,27 @@
-export default function CreatePage() {
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import { SESSION_COOKIE } from "@/lib/session";
+import { Nav } from "@/components/nav";
+import { CreateFlow } from "@/components/create-flow";
+
+export default async function CreatePage() {
+  const userId = cookies().get(SESSION_COOKIE)?.value;
+  const user = userId
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : null;
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-ink-900 px-6">
-      <div className="text-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-rust-400">
-          Coming in phase 3
-        </p>
-        <h1 className="mt-4 font-serif text-4xl text-cream-100">
-          Create your report
-        </h1>
-        <p className="mt-3 text-[15px] text-cream-400">
-          The intake flow lives here.
-        </p>
-      </div>
-    </main>
+    <>
+      <Nav />
+      <main className="min-h-screen bg-ink-900 py-16">
+        <CreateFlow
+          initialUser={
+            user
+              ? { id: user.id, email: user.email, companyName: user.companyName }
+              : null
+          }
+        />
+      </main>
+    </>
   );
 }
