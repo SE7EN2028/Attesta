@@ -6,6 +6,7 @@ import { transcribeSourceFile } from "@/lib/transcription";
 import {
   generateReportContent,
   type GeneratedReport,
+  type ReportGenerationBudget,
 } from "@/lib/report-generation";
 
 export type ActionResult<T> =
@@ -78,7 +79,8 @@ export async function runTranscription(
 }
 
 export async function runReportGeneration(
-  meetingRequestId: string
+  meetingRequestId: string,
+  budget?: ReportGenerationBudget
 ): Promise<ActionResult<GeneratedReport>> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
@@ -93,7 +95,7 @@ export async function runReportGeneration(
   });
 
   try {
-    const generated = await generateReportContent(meetingRequestId);
+    const generated = await generateReportContent(meetingRequestId, budget);
 
     const report = await prisma.report.upsert({
       where: { meetingRequestId },

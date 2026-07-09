@@ -66,8 +66,14 @@ export type GeneratedReport = {
   generatedBy: ProviderName;
 };
 
+export type ReportGenerationBudget = {
+  timeoutMs?: number;
+  retries?: number;
+};
+
 export async function generateReportContent(
-  meetingRequestId: string
+  meetingRequestId: string,
+  budget?: ReportGenerationBudget
 ): Promise<GeneratedReport> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
@@ -128,7 +134,7 @@ export async function generateReportContent(
 
   const prompt = buildPrompt({ ...promptMetadata, transcriptText });
 
-  return callModelForJson(prompt);
+  return callModelForJson(prompt, budget);
 }
 
 function formatTranscript(rawText: string, speakerLabels: SpeakerLabel[]): string {
@@ -291,23 +297,28 @@ function isTransientProviderError(message: string): boolean {
   );
 }
 
-async function callModelForJson(prompt: string): Promise<GeneratedReport> {
+async function callModelForJson(
+  prompt: string,
+  budget?: ReportGenerationBudget
+): Promise<GeneratedReport> {
   const apiKey = resolveGeminiApiKey();
+  const maxAttempts = budget?.retries ?? TRANSIENT_RETRY_ATTEMPTS;
+  const timeoutMs = budget?.timeoutMs ?? PROVIDER_TIMEOUT_MS;
 
   let lastError: unknown;
-  for (let attempt = 1; attempt <= TRANSIENT_RETRY_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const result = await callProviderWithRetry(apiKey, prompt);
+      const result = await callProviderWithRetry(apiKey, prompt, timeoutMs);
       return { ...result, generatedBy: "gemini" };
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
-      const isLastAttempt = attempt === TRANSIENT_RETRY_ATTEMPTS;
+      const isLastAttempt = attempt === maxAttempts;
       if (!isTransientProviderError(message) || isLastAttempt) {
         throw error;
       }
       console.error(
-        `[report-generation] gemini attempt ${attempt}/${TRANSIENT_RETRY_ATTEMPTS} hit a transient error (${message}) — retrying in ${TRANSIENT_RETRY_DELAY_MS / 1000}s.`
+        `[report-generation] gemini attempt ${attempt}/${maxAttempts} hit a transient error (${message}) — retrying in ${TRANSIENT_RETRY_DELAY_MS / 1000}s.`
       );
       await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
     }
@@ -319,14 +330,15 @@ async function callModelForJson(prompt: string): Promise<GeneratedReport> {
 // no-markdown-fences instruction before giving up entirely.
 async function callProviderWithRetry(
   apiKey: string,
-  prompt: string
+  prompt: string,
+  timeoutMs: number
 ): Promise<Omit<GeneratedReport, "generatedBy">> {
-  const first = await callChatCompletion(apiKey, prompt);
+  const first = await callChatCompletion(apiKey, prompt, timeoutMs);
   const parsed = tryParseJson(first);
   if (parsed) return validateShape(parsed);
 
   const strictPrompt = `${prompt}\n\nIMPORTANT: Your previous response was not valid JSON. Return ONLY a single valid JSON object — no markdown code fences (no \`\`\`), no commentary, no explanation. The response must start with { and end with }.`;
-  const second = await callChatCompletion(apiKey, strictPrompt);
+  const second = await callChatCompletion(apiKey, strictPrompt, timeoutMs);
   const parsedSecond = tryParseJson(second);
   if (parsedSecond) return validateShape(parsedSecond);
 
@@ -341,7 +353,11 @@ async function callProviderWithRetry(
 // content, i.e. the request was still in flight, not stuck/erroring.
 const PROVIDER_TIMEOUT_MS = 400_000;
 
-async function callChatCompletion(apiKey: string, prompt: string): Promise<string> {
+async function callChatCompletion(
+  apiKey: string,
+  prompt: string,
+  timeoutMs: number
+): Promise<string> {
   // Next.js patches the global fetch for its data cache, and in practice
   // that patched fetch does not reliably honor an AbortSignal here — a
   // signal-based timeout was observed to never fire. Race against a plain
@@ -349,9 +365,8 @@ async function callChatCompletion(apiKey: string, prompt: string): Promise<strin
   // budget, regardless of what the abandoned fetch does afterwards.
   const timeout = new Promise<never>((_, reject) => {
     setTimeout(
-      () =>
-        reject(new Error(`gemini request timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`)),
-      PROVIDER_TIMEOUT_MS
+      () => reject(new Error(`gemini request timed out after ${timeoutMs / 1000}s.`)),
+      timeoutMs
     );
   });
 

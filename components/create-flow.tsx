@@ -404,7 +404,11 @@ export function CreateFlow({
 
     if (stage === "generate") {
       setLive({ phase: "generating" });
-      const g = await runReportGeneration(id);
+      // Fail-fast budget for live demo: 90s timeout, 2 attempts (~2 min total)
+      const g = await runReportGeneration(id, {
+        timeoutMs: 90_000,
+        retries: 2,
+      });
       if (!g.ok) {
         setLive({ phase: "error", stage: "generate", message: g.error });
         return;
@@ -451,20 +455,24 @@ export function CreateFlow({
 
   if (mode === "live" && live) {
     if (live.phase === "error") {
-      const where =
+      const heading =
         live.stage === "transcribe"
-          ? "Transcription failed."
+          ? "Transcription failed"
           : live.stage === "generate"
-            ? "Report generation failed."
-            : "Submission failed.";
+            ? "Report generation didn't complete"
+            : "Submission failed";
+      const softMessage =
+        live.stage === "generate"
+          ? "The model can be busy right now — this may fail occasionally. Feel free to try again."
+          : live.message;
       return (
         <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
           <Eyebrow>Pipeline failed</Eyebrow>
           <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
-            {where}
+            {heading}
           </h1>
           <p className="mt-3 max-w-lg text-[14.5px] leading-relaxed text-rust-400">
-            {live.message}
+            {softMessage}
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button onClick={() => runLive(live.stage)}>Retry</Button>
