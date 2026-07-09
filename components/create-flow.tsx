@@ -134,20 +134,28 @@ function reducer(state: FlowState, action: Action): FlowState {
 }
 
 const REGIONS = [
+  // "General" is jurisdiction-neutral — a plain professional report with no
+  // works-council / labour-law framing and no compliance audit. Listed first.
+  { value: "General", live: true },
   { value: "France", live: true },
   { value: "Germany", live: true },
   { value: "Belgium", live: true },
   { value: "Netherlands", live: true },
+  { value: "UK", live: false },
+  { value: "USA", live: false },
+  { value: "Canada", live: false },
 ];
 
 // Governing bodies are region-specific — each region's real statutory
-// works-council structures. All four regions are fully selectable and run
-// the same transcription + report pipeline; compliance-audit depth still
-// differs (only France has a verified rule set — see lib/report-generation.ts).
+// works-council structures. All live regions run the same transcription +
+// report pipeline; compliance-audit depth differs (only France has a verified
+// rule set — see lib/report-generation.ts). "General" has no jurisdiction-
+// specific body and no compliance audit at all.
 const GOVERNING_BODIES_BY_REGION: Record<
   string,
   { value: string; label: string }[]
 > = {
+  General: [{ value: "General", label: "Standard meeting — general / other" }],
   France: [
     { value: "CSE", label: "CSE — works council" },
     { value: "CSSCT", label: "CSSCT — health & safety" },

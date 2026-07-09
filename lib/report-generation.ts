@@ -134,7 +134,13 @@ export async function generateReportContent(
 
   const prompt = buildPrompt({ ...promptMetadata, transcriptText });
 
-  return callModelForJson(prompt, budget);
+  const generated = await callModelForJson(prompt, budget);
+  // Guarantee no compliance findings for General regardless of what the model
+  // returned — General reports are never audited against a rule set.
+  if (meetingRequest.region === GENERAL_REGION) {
+    return { ...generated, complianceFindings: [] };
+  }
+  return generated;
 }
 
 function formatTranscript(rawText: string, speakerLabels: SpeakerLabel[]): string {
@@ -211,7 +217,16 @@ const RESPONSE_SHAPE = `{
 // statute. This keeps the audit honest rather than fabricating foreign law.
 const VERIFIED_RULESET_REGIONS = new Set(["France"]);
 
+// "General" is a jurisdiction-neutral report: no works-council framing, no
+// compliance audit at all. The prompt tells the model to skip findings and
+// generateReportContent also force-clears them (belt and suspenders).
+export const GENERAL_REGION = "General";
+
 function complianceInstructions(region: string, governingBody: string): string {
+  if (region === GENERAL_REGION) {
+    return `COMPLIANCE FINDINGS: return an empty array []. This is a general professional meeting report and is NOT audited against any regulatory, statutory, or works-council framework. Produce no compliance findings and no legal or regulatory references of any kind.`;
+  }
+
   const core = `COMPLIANCE FINDINGS: audit the transcript itself (not the report you just wrote) against standard works-council procedure for a ${governingBody} meeting. Check, where the transcript gives evidence either way: quorum (was a headcount or present/total stated, and does it meet a typical threshold?), notice/convocation period before the meeting, whether votes were called with a recorded headcount vs. just "no objection", approval of prior minutes, and standard documents a meeting of this type usually references (attendance sheet, written employer answers to prior questions) that are notably absent or notably present.
 Each finding must cite what in the transcript supports it (fold that into description/impactDescription) — do not invent findings the transcript gives no evidence for. If the transcript is silent on something (e.g. convocation timing), either omit it or file it as MISSING_DOCUMENT/ADVISORY with lower confidence, not as a confident RISK. confidence (0-100) reflects your certainty given what the transcript actually shows. Include both problems (RISK/MISSING_DOCUMENT/RECOMMENDATION) and things done correctly (COMPLIANT) if evidenced. Empty array if the transcript gives no basis for any finding.`;
 
@@ -237,6 +252,14 @@ function buildPrompt(input: {
   tier: string;
   transcriptText: string;
 }): string {
+  const isGeneral = input.region === GENERAL_REGION;
+  const generalFraming = isGeneral
+    ? `\nGENERAL REPORT: produce a clear, professional meeting record — attendance, agenda, discussion log, decisions and votes where the transcript supports them. Keep it jurisdiction-neutral: do NOT reference any country's labour law, works-council framework, statutes, or legal/regulatory citations.\n`
+    : "";
+  const languageLine = isGeneral
+    ? `LANGUAGE: write narrative fields in ${input.outputLanguage}.`
+    : `LANGUAGE: write narrative fields in ${input.outputLanguage}. Keep legal/regulatory citations tied to the ${input.region} jurisdiction in their original, untranslated form.`;
+
   return `MEETING METADATA
 Company: ${input.company}
 Region: ${input.region}
@@ -247,8 +270,8 @@ Output language: ${input.outputLanguage}
 Report tier: ${input.tier}
 
 TIER: ${tierInstructions(input.tier)}
-
-LANGUAGE: write narrative fields in ${input.outputLanguage}. Keep legal/regulatory citations tied to the ${input.region} jurisdiction in their original, untranslated form.
+${generalFraming}
+${languageLine}
 
 TRANSCRIPT (chronological, diarized where available — primary source of truth):
 ${input.transcriptText}

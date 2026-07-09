@@ -94,6 +94,7 @@ export default async function SamplesPage() {
             tier={report.tier}
             status={report.status}
             generatedBy={report.generatedBy}
+            region={report.meetingRequest.region}
           />
         </div>
       </main>

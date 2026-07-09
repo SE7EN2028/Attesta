@@ -60,6 +60,7 @@ export default async function ReportPage({
           tier={report.tier}
           status={report.status}
           generatedBy={report.generatedBy}
+          region={report.meetingRequest.region}
         />
       </main>
     </>

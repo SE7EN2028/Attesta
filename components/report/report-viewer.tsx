@@ -22,6 +22,7 @@ export function ReportViewer({
   tier,
   status,
   generatedBy,
+  region,
 }: {
   reportId: string;
   content: ReportContent;
@@ -30,7 +31,11 @@ export function ReportViewer({
   tier: string;
   status: string;
   generatedBy: string | null;
+  region?: string;
 }) {
+  // General reports have no compliance audit — hide its entry point. Fall back
+  // to the region embedded in the report content when not passed explicitly.
+  const isGeneral = (region ?? content.coverInfo.region) === "General";
   // buildReportPages is pure over these inputs; recompute only when they change.
   const pagesRef = useRef(
     buildReportPages(content, speakerAnalytics, numericalData, {
@@ -242,9 +247,13 @@ export function ReportViewer({
             {content.coverInfo.governingBody}
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/report/${reportId}/compliance`}>View compliance audit</Link>
-        </Button>
+        {!isGeneral && (
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/report/${reportId}/compliance`}>
+              View compliance audit
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div

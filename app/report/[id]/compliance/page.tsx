@@ -33,7 +33,8 @@ export default async function CompliancePage({
   const meetingDate =
     content?.coverInfo?.date ?? report.meetingRequest.meetingDate.toISOString().slice(0, 10);
 
-  const score = computeComplianceScore(report.complianceFindings);
+  const isGeneral = report.meetingRequest.region === "General";
+  const score = isGeneral ? 0 : computeComplianceScore(report.complianceFindings);
 
   return (
     <>
@@ -54,15 +55,39 @@ export default async function CompliancePage({
             {company} · {report.meetingRequest.region} · {report.meetingRequest.governingBody}
           </p>
 
-          <ComplianceDashboard
-            findings={report.complianceFindings as unknown as ComplianceFindingRow[]}
-            score={score}
-            meetingTitle={meetingTitle}
-            company={company}
-            meetingDate={meetingDate}
-            region={report.meetingRequest.region}
-            governingBody={report.meetingRequest.governingBody}
-          />
+          {isGeneral ? (
+            <div className="mt-10 max-w-2xl rounded-xl border border-cream-200/10 bg-ink-850 p-8">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-cream-500">
+                Not applicable
+              </p>
+              <h2 className="mt-3 font-serif text-2xl text-cream-100">
+                Compliance audit not applicable
+              </h2>
+              <p className="mt-3 text-[15px] leading-relaxed text-cream-300">
+                General reports don&apos;t check against a specific regulatory
+                or works-council framework, so there&apos;s no compliance audit
+                for this meeting. The full report — attendance, agenda,
+                discussion, decisions and votes — is on the{" "}
+                <Link
+                  href={`/report/${report.id}`}
+                  className="text-rust-400 underline underline-offset-2 hover:text-rust-300"
+                >
+                  report page
+                </Link>
+                .
+              </p>
+            </div>
+          ) : (
+            <ComplianceDashboard
+              findings={report.complianceFindings as unknown as ComplianceFindingRow[]}
+              score={score}
+              meetingTitle={meetingTitle}
+              company={company}
+              meetingDate={meetingDate}
+              region={report.meetingRequest.region}
+              governingBody={report.meetingRequest.governingBody}
+            />
+          )}
         </Container>
       </main>
     </>
