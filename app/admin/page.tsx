@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Nav } from "@/components/nav";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
+import { Button } from "@/components/ui/button";
 import { AdminSubmittedList } from "@/components/admin-submitted-list";
 import { AdminReviewList } from "@/components/admin-review-list";
 
@@ -53,6 +55,12 @@ export default async function AdminPage() {
       ).length,
     }));
 
+  const withReport = await prisma.meetingRequest.findMany({
+    where: { report: { isNot: null } },
+    include: { report: true, user: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
   return (
     <>
       <Nav />
@@ -83,6 +91,43 @@ export default async function AdminPage() {
 
           <div className="mt-10">
             <AdminReviewList initialRows={reviewRows} />
+          </div>
+
+          <h2 className="mt-16 font-serif text-2xl text-cream-100 md:text-3xl">
+            Completed reports
+          </h2>
+          <p className="mt-3 max-w-xl text-[15px] text-cream-300">
+            Drafted reports, ready to view in the report viewer.
+          </p>
+
+          <div className="mt-10 space-y-4">
+            {withReport.length === 0 ? (
+              <p className="text-[14.5px] text-cream-400">
+                No reports generated yet.
+              </p>
+            ) : (
+              withReport.map((mr) => (
+                <div
+                  key={mr.id}
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-cream-200/10 bg-ink-850 p-6"
+                >
+                  <div>
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-rust-400">
+                      {mr.tier} · {mr.report!.status}
+                    </p>
+                    <h3 className="mt-1 font-serif text-lg text-cream-100">
+                      {mr.title}
+                    </h3>
+                    <p className="mt-1 text-[13px] text-cream-400">
+                      {mr.company} · {mr.user.email}
+                    </p>
+                  </div>
+                  <Button asChild size="sm">
+                    <Link href={`/report/${mr.report!.id}`}>View report</Link>
+                  </Button>
+                </div>
+              ))
+            )}
           </div>
         </Container>
       </main>
