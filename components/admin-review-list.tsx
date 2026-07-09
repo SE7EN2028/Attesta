@@ -80,6 +80,28 @@ export function AdminReviewList({ initialRows }: { initialRows: Row[] }) {
                 disabled={state.status === "running"}
                 onClick={() => handleRun(row.id)}
               >
+                {state.status === "running" && (
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                )}
                 {state.status === "running"
                   ? "Generating…"
                   : state.status === "done"
@@ -87,6 +109,13 @@ export function AdminReviewList({ initialRows }: { initialRows: Row[] }) {
                     : "Generate report"}
               </Button>
             </div>
+
+            {state.status === "running" && (
+              <p className="mt-4 text-[13px] text-cream-400">
+                Generating report — this can take several minutes due to AI
+                processing load.
+              </p>
+            )}
 
             {state.status === "error" && (
               <p className="mt-4 rounded border border-rust-400/30 bg-rust-400/5 px-4 py-3 text-[13px] text-rust-400">
