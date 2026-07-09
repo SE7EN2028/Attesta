@@ -2,6 +2,7 @@
 
 import { useReducer, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,23 @@ import {
   submitMeetingRequest,
   uploadSourceFile,
 } from "@/app/create/actions";
+import { runReportGeneration, runTranscription } from "@/app/admin/actions";
+import { getReportIdForRequest } from "@/app/try/actions";
 
 type Step = 1 | 2 | 3 | 4 | "done";
 
 type Tier = "ESSENTIAL" | "SCOPE" | "PREMIUM";
+
+// Flow behaviour after tier selection:
+//  - "request" (default, /create): submit → SUBMITTED → "we'll be in touch".
+//  - "live" (/try demo): submit → transcribe → generate → redirect to report.
+type FlowMode = "request" | "live";
+
+type LiveState =
+  | { phase: "transcribing" }
+  | { phase: "generating" }
+  | { phase: "redirecting" }
+  | { phase: "error"; stage: "submit" | "transcribe" | "generate"; message: string };
 
 type FlowState = {
   step: Step;
@@ -233,14 +247,18 @@ function initialState(
 
 export function CreateFlow({
   initialUser,
+  mode = "request",
 }: {
   initialUser: { id: string; email: string; companyName: string } | null;
+  mode?: FlowMode;
 }) {
   const [state, dispatch] = useReducer(reducer, initialUser, initialState);
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supportingInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [draggingSupporting, setDraggingSupporting] = useState(false);
+  const [live, setLive] = useState<LiveState | null>(null);
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
@@ -335,6 +353,10 @@ export function CreateFlow({
 
   async function handleSubmit() {
     if (!state.meetingRequestId || !state.tier) return;
+    if (mode === "live") {
+      runLive("submit");
+      return;
+    }
     dispatch({ type: "SET_SUBMITTING", submitting: true });
     const result = await submitMeetingRequest({
       meetingRequestId: state.meetingRequestId,
@@ -346,6 +368,55 @@ export function CreateFlow({
       return;
     }
     dispatch({ type: "SUBMITTED" });
+  }
+
+  // Live demo path: run the real pipeline synchronously and land on the
+  // generated report. Resumable — a retry re-enters at the failed stage so a
+  // generation-only failure doesn't re-run Deepgram.
+  async function runLive(from: "submit" | "transcribe" | "generate") {
+    const id = state.meetingRequestId;
+    if (!id || !state.tier) return;
+    let stage: "submit" | "transcribe" | "generate" = from;
+
+    if (stage === "submit") {
+      setLive({ phase: "transcribing" });
+      const s = await submitMeetingRequest({
+        meetingRequestId: id,
+        tier: state.tier,
+        notes: state.notes,
+      });
+      if (!s.ok) {
+        setLive({ phase: "error", stage: "submit", message: s.error });
+        return;
+      }
+      stage = "transcribe";
+    }
+
+    if (stage === "transcribe") {
+      setLive({ phase: "transcribing" });
+      const t = await runTranscription(id);
+      if (!t.ok) {
+        setLive({ phase: "error", stage: "transcribe", message: t.error });
+        return;
+      }
+      stage = "generate";
+    }
+
+    if (stage === "generate") {
+      setLive({ phase: "generating" });
+      const g = await runReportGeneration(id);
+      if (!g.ok) {
+        setLive({ phase: "error", stage: "generate", message: g.error });
+        return;
+      }
+      const r = await getReportIdForRequest(id);
+      if (!r.ok) {
+        setLive({ phase: "error", stage: "generate", message: r.error });
+        return;
+      }
+      setLive({ phase: "redirecting" });
+      router.push(`/report/${r.data.reportId}`);
+    }
   }
 
   const step2Valid =
@@ -374,6 +445,78 @@ export function CreateFlow({
         <Button asChild className="mt-8">
           <Link href="/">Back to home</Link>
         </Button>
+      </Container>
+    );
+  }
+
+  if (mode === "live" && live) {
+    if (live.phase === "error") {
+      const where =
+        live.stage === "transcribe"
+          ? "Transcription failed."
+          : live.stage === "generate"
+            ? "Report generation failed."
+            : "Submission failed.";
+      return (
+        <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+          <Eyebrow>Pipeline failed</Eyebrow>
+          <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
+            {where}
+          </h1>
+          <p className="mt-3 max-w-lg text-[14.5px] leading-relaxed text-rust-400">
+            {live.message}
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Button onClick={() => runLive(live.stage)}>Retry</Button>
+            <Button asChild variant="outline">
+              <Link href="/">Back to home</Link>
+            </Button>
+          </div>
+        </Container>
+      );
+    }
+
+    const heading =
+      live.phase === "transcribing"
+        ? "Transcribing your meeting…"
+        : live.phase === "generating"
+          ? "Generating your report — this can take a few minutes…"
+          : "Report ready — opening it now…";
+    const subtext =
+      live.phase === "transcribing"
+        ? "Sending your source to transcription (Deepgram for audio/video, text extraction for documents)."
+        : live.phase === "generating"
+          ? "Drafting the full structured report from the transcript — attendance, agenda, discussion, decisions and votes."
+          : "Taking you straight to your generated report.";
+    return (
+      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+        <svg
+          className="h-10 w-10 animate-spin text-rust-400"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+        <Eyebrow className="mt-6">Live pipeline</Eyebrow>
+        <h1 className="mt-4 max-w-xl font-serif text-3xl text-cream-100 md:text-4xl">
+          {heading}
+        </h1>
+        <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-cream-300">
+          {subtext}
+        </p>
       </Container>
     );
   }
@@ -817,10 +960,14 @@ export function CreateFlow({
 
           <Button
             className="mt-6"
-            disabled={!state.tier || state.submitting}
+            disabled={!state.tier || state.submitting || live !== null}
             onClick={handleSubmit}
           >
-            {state.submitting ? "Submitting…" : "Submit request"}
+            {mode === "live"
+              ? "Generate report now →"
+              : state.submitting
+                ? "Submitting…"
+                : "Submit request"}
           </Button>
         </div>
       )}

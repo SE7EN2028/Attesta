@@ -32,9 +32,14 @@ export function Nav() {
           ))}
         </nav>
 
-        <Button asChild size="sm">
-          <Link href="/create">Try the preview</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/try">Try it live</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/create">Try the preview</Link>
+          </Button>
+        </div>
       </Container>
       <ScrollProgress />
     </header>
