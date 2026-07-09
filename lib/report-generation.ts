@@ -44,10 +44,25 @@ export type SpeakerAnalytics = {
 
 export type NumericalData = { label: string; value: string; context: string }[];
 
+export type ComplianceFindingData = {
+  category:
+    | "RISK"
+    | "MISSING_DOCUMENT"
+    | "COMPLIANCE_REFERENCE"
+    | "RECOMMENDATION"
+    | "COMPLIANT";
+  riskLevel: "CRITICAL" | "HIGH" | "MEDIUM" | "ADVISORY" | "COMPLIANT";
+  description: string;
+  ruleReference: string | null;
+  impactDescription: string | null;
+  confidence: number;
+};
+
 export type GeneratedReport = {
   content: ReportContent;
   speakerAnalytics: SpeakerAnalytics;
   numericalData: NumericalData;
+  complianceFindings: ComplianceFindingData[];
   generatedBy: ProviderName;
 };
 
@@ -178,8 +193,14 @@ const RESPONSE_SHAPE = `{
     "closingNotes": string
   },
   "speakerAnalytics": [ { "speakerName": string, "talkTimeSeconds": number, "contributionCount": number, "onTopicScore": number } ],
-  "numericalData": [ { "label": string, "value": string, "context": string } ]
+  "numericalData": [ { "label": string, "value": string, "context": string } ],
+  "complianceFindings": [ { "category": "RISK"|"MISSING_DOCUMENT"|"COMPLIANCE_REFERENCE"|"RECOMMENDATION"|"COMPLIANT", "riskLevel": "CRITICAL"|"HIGH"|"MEDIUM"|"ADVISORY"|"COMPLIANT", "description": string, "ruleReference": string|null, "impactDescription": string|null, "confidence": number } ]
 }`;
+
+function complianceInstructions(region: string, governingBody: string): string {
+  return `COMPLIANCE FINDINGS: audit the transcript itself (not the report you just wrote) against standard procedure for a ${governingBody} meeting under ${region} rules. Check specifically for, where the transcript gives evidence either way: quorum (was a headcount or present/total stated, and does it meet a typical statutory threshold?), notice/convocation period before the meeting, whether votes were called with a recorded headcount vs. just "no objection", approval of prior minutes, and standard clauses/documents a meeting of this type usually references (e.g. BDESE, attendance sheet, written employer answers to prior questions) that are notably absent or notably present.
+Each finding must cite what in the transcript supports it (fold that into description/impactDescription) — do not invent findings the transcript gives no evidence for. If the transcript is silent on something (e.g. convocation timing), either omit it or file it as MISSING_DOCUMENT/ADVISORY with lower confidence, not as a confident RISK. ruleReference is a real statute/article if you're confident of the exact citation for the stated region, otherwise null — never invent a citation. confidence (0-100) reflects your certainty given what the transcript actually shows. Include both problems (RISK/MISSING_DOCUMENT/RECOMMENDATION) and things done correctly (COMPLIANT) if evidenced. Empty array if the transcript gives no basis for any finding.`;
+}
 
 // NOTE: supporting-document text is deliberately not a param here — see
 // the comment in generateReportContent. Re-add a supportingDocs param and
@@ -213,7 +234,9 @@ ${input.transcriptText}
 OUTPUT FORMAT — respond with ONE JSON object, exactly this shape:
 ${RESPONSE_SHAPE}
 
-Base every field strictly on the transcript above — no invented names, votes, or figures. onTopicScore is 0-100. numericalData covers any figures/amounts/counts/dates mentioned. Use an empty array or a short honest note instead of fabricating content.`;
+Base every field strictly on the transcript above — no invented names, votes, or figures. onTopicScore is 0-100. numericalData covers any figures/amounts/counts/dates mentioned. Use an empty array or a short honest note instead of fabricating content.
+
+${complianceInstructions(input.region, input.governingBody)}`;
 }
 
 const SYSTEM_PROMPT =
@@ -244,7 +267,7 @@ const TRANSIENT_RETRY_ATTEMPTS = 3;
 const TRANSIENT_RETRY_DELAY_MS = 15_000;
 
 function isTransientProviderError(message: string): boolean {
-  return /429|503|RESOURCE_EXHAUSTED|UNAVAILABLE|Service Unavailable|timed out/i.test(
+  return /429|503|RESOURCE_EXHAUSTED|UNAVAILABLE|Service Unavailable|timed out|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(
     message
   );
 }
@@ -294,7 +317,7 @@ async function callProviderWithRetry(
 }
 
 // 240s was tuned for the old Groq/NIM setup and proved too tight for
-// Gemini on this app's ~37K-token prompts with a 16K max-output JSON
+// Gemini on this app's ~37K-token prompts with a large max-output JSON
 // response — observed two clean 240s timeouts back to back with no error
 // content, i.e. the request was still in flight, not stuck/erroring.
 const PROVIDER_TIMEOUT_MS = 400_000;
@@ -326,7 +349,10 @@ async function callChatCompletion(apiKey: string, prompt: string): Promise<strin
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 16384,
+            // Bumped from 16384 — complianceFindings adds real output volume
+            // on top of an already-large discussionLog/speakerAnalytics
+            // payload for a full-length transcript.
+            maxOutputTokens: 32768,
             responseMimeType: "application/json",
           },
         }),
@@ -389,9 +415,11 @@ function validateShape(parsed: unknown): Omit<GeneratedReport, "generatedBy"> {
     !("content" in parsed) ||
     !("speakerAnalytics" in parsed) ||
     !("numericalData" in parsed) ||
+    !("complianceFindings" in parsed) ||
     typeof (parsed as { content: unknown }).content !== "object" ||
     !Array.isArray((parsed as { speakerAnalytics: unknown }).speakerAnalytics) ||
-    !Array.isArray((parsed as { numericalData: unknown }).numericalData)
+    !Array.isArray((parsed as { numericalData: unknown }).numericalData) ||
+    !Array.isArray((parsed as { complianceFindings: unknown }).complianceFindings)
   ) {
     throw new Error("Model JSON did not match the expected report shape.");
   }

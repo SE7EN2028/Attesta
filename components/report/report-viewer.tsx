@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
   NumericalData,
@@ -56,6 +58,7 @@ function ReportPageHalf({
 }
 
 export function ReportViewer({
+  reportId,
   content,
   speakerAnalytics,
   numericalData,
@@ -63,6 +66,7 @@ export function ReportViewer({
   status,
   generatedBy,
 }: {
+  reportId: string;
   content: ReportContent;
   speakerAnalytics: SpeakerAnalytics;
   numericalData: NumericalData;
@@ -103,14 +107,21 @@ export function ReportViewer({
 
   return (
     <Container>
-      <Eyebrow>Report</Eyebrow>
-      <h1 className="mt-5 font-serif text-3xl text-cream-100 md:text-4xl">
-        {content.coverInfo.meetingTitle}
-      </h1>
-      <p className="mt-3 max-w-xl text-[15px] text-cream-300">
-        {content.coverInfo.company} · {content.coverInfo.region} ·{" "}
-        {content.coverInfo.governingBody}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Eyebrow>Report</Eyebrow>
+          <h1 className="mt-5 font-serif text-3xl text-cream-100 md:text-4xl">
+            {content.coverInfo.meetingTitle}
+          </h1>
+          <p className="mt-3 max-w-xl text-[15px] text-cream-300">
+            {content.coverInfo.company} · {content.coverInfo.region} ·{" "}
+            {content.coverInfo.governingBody}
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/report/${reportId}/compliance`}>View compliance audit</Link>
+        </Button>
+      </div>
 
       <div className="mt-10 flex overflow-hidden rounded-md bg-paper-500 text-slate-900 shadow-[0_26px_50px_-26px_rgba(13,19,27,0.6),0_6px_16px_-8px_rgba(13,19,27,0.35)]">
         <ReportPageHalf page={leftPage} pageNumber={leftIndex + 1} bordered />

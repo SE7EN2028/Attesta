@@ -89,7 +89,7 @@ export async function runReportGeneration(
   try {
     const generated = await generateReportContent(meetingRequestId);
 
-    await prisma.report.upsert({
+    const report = await prisma.report.upsert({
       where: { meetingRequestId },
       update: {
         tier: meetingRequest.tier,
@@ -111,6 +111,24 @@ export async function runReportGeneration(
         status: "DRAFT",
       },
     });
+
+    // Re-generation replaces findings wholesale rather than merging —
+    // stale findings from a previous draft shouldn't linger next to fresh
+    // ones from a re-run.
+    await prisma.complianceFinding.deleteMany({ where: { reportId: report.id } });
+    if (generated.complianceFindings.length > 0) {
+      await prisma.complianceFinding.createMany({
+        data: generated.complianceFindings.map((f) => ({
+          reportId: report.id,
+          category: f.category,
+          riskLevel: f.riskLevel,
+          description: f.description,
+          ruleReference: f.ruleReference,
+          impactDescription: f.impactDescription,
+          confidence: f.confidence,
+        })),
+      });
+    }
 
     await prisma.meetingRequest.update({
       where: { id: meetingRequestId },

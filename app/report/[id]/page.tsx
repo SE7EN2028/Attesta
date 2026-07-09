@@ -72,6 +72,7 @@ export default async function ReportPage({
       <Nav />
       <main className="min-h-screen bg-ink-900 py-12 md:py-16">
         <ReportViewer
+          reportId={report.id}
           content={report.content as unknown as ReportContent}
           speakerAnalytics={report.speakerAnalytics as unknown as SpeakerAnalytics}
           numericalData={report.numericalData as unknown as NumericalData}
