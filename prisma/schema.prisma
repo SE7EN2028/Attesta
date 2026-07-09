@@ -84,6 +84,11 @@ model Report {
   content          Json // { coverInfo, executiveSummary, attendance, agendaItems, discussionLog, decisions, votes, proceduralNotes, closingNotes }
   speakerAnalytics Json // [{ speakerName, talkTimeSeconds, contributionCount, onTopicScore }]
   numericalData    Json // [{ label, value, context }]
+  // Which model provider actually produced this report — null for reports
+  // that predate this field (e.g. seed data). Always "gemini" going
+  // forward (see lib/report-generation.ts); older rows may still say
+  // "deepseek" | "nim" | "groq" from before the provider swap.
+  generatedBy      String? // "gemini" (legacy: "deepseek" | "nim" | "groq")
   status           String // "DRAFT" | "LOCKED"
   lockedAt         DateTime?
   lockedBy         String?

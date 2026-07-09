@@ -97,6 +97,7 @@ export async function runReportGeneration(
         content: generated.content,
         speakerAnalytics: generated.speakerAnalytics,
         numericalData: generated.numericalData,
+        generatedBy: generated.generatedBy,
         status: "DRAFT",
       },
       create: {
@@ -106,6 +107,7 @@ export async function runReportGeneration(
         content: generated.content,
         speakerAnalytics: generated.speakerAnalytics,
         numericalData: generated.numericalData,
+        generatedBy: generated.generatedBy,
         status: "DRAFT",
       },
     });

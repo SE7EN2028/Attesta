@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { countTokens } from "gpt-tokenizer";
 
-const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_MODEL = "deepseek-chat";
+type ProviderName = "gemini";
 
 type Segment = { start: number; end: number; text: string };
 type SpeakerLabel = { speakerId: string; name: string | null; segments: Segment[] };
@@ -48,6 +48,7 @@ export type GeneratedReport = {
   content: ReportContent;
   speakerAnalytics: SpeakerAnalytics;
   numericalData: NumericalData;
+  generatedBy: ProviderName;
 };
 
 export async function generateReportContent(
@@ -72,12 +73,19 @@ export async function generateReportContent(
     (f) => f.role === "SUPPORTING_DOCUMENT" && f.extractedText
   );
 
-  const transcriptText = formatTranscript(
+  const rawTranscriptText = formatTranscript(
     primaryFile.transcript.rawText,
     primaryFile.transcript.speakerLabels as unknown as SpeakerLabel[]
   );
+  // Deterministic whitespace/formatting compaction — no content is touched,
+  // only redundant blank lines and run-on spaces (real DOCX/PDF extractions
+  // carry a lot of table-layout padding that's pure token waste once flattened
+  // to plain text). A regex pass does this losslessly for free; no need to
+  // burn an LLM call reducing whitespace when the transform is this
+  // mechanical.
+  const transcriptText = compactWhitespace(rawTranscriptText);
 
-  const prompt = buildPrompt({
+  const promptMetadata = {
     company: meetingRequest.company,
     region: meetingRequest.region,
     governingBody: meetingRequest.governingBody,
@@ -85,12 +93,25 @@ export async function generateReportContent(
     title: meetingRequest.title,
     outputLanguage: meetingRequest.outputLanguage,
     tier: meetingRequest.tier,
-    transcriptText,
-    supportingDocs: supportingDocs.map((f) => ({
-      fileName: f.fileName,
-      text: f.extractedText as string,
-    })),
-  });
+  };
+
+  // Token breakdown, logged before the call. Supporting docs are counted
+  // here for visibility but deliberately NOT included in the prompt below
+  // (scope cut: validate the core transcript-to-report path first).
+  const supportingDocsCombinedText = supportingDocs
+    .map((f) => f.extractedText as string)
+    .join("\n\n");
+  const rawTranscriptTokens = countTokens(rawTranscriptText);
+  const transcriptTokens = countTokens(transcriptText);
+  const supportingDocsTokens = countTokens(supportingDocsCombinedText);
+  const fixedPromptTokens = countTokens(
+    buildPrompt({ ...promptMetadata, transcriptText: "" })
+  );
+  console.log(
+    `[report-generation] token breakdown — transcript raw: ${rawTranscriptTokens}, transcript after whitespace compaction: ${transcriptTokens}, supporting docs (excluded from prompt): ${supportingDocsTokens}, fixed prompt/schema: ${fixedPromptTokens}, total sent: ${transcriptTokens + fixedPromptTokens}`
+  );
+
+  const prompt = buildPrompt({ ...promptMetadata, transcriptText });
 
   return callModelForJson(prompt);
 }
@@ -118,32 +139,32 @@ function formatTimestamp(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+// Collapses redundant whitespace without touching any actual word/character
+// content: trims trailing spaces per line, folds runs of spaces/tabs within
+// a line down to one, and caps blank-line runs at a single blank line.
+function compactWhitespace(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function tierInstructions(tier: string): string {
   switch (tier) {
     case "ESSENTIAL":
-      return [
-        "ESSENTIAL tier — chronological summary only:",
-        "- Populate executiveSummary and discussionLog strictly in time order from the transcript.",
-        "- agendaItems MUST be an empty array — do not impose agenda structure at this tier.",
-        "- decisions and votes MUST be empty arrays, even if the transcript mentions a vote or decision.",
-      ].join("\n");
+      return "ESSENTIAL: chronological summary only. executiveSummary + discussionLog in time order. agendaItems/decisions/votes = empty arrays, always.";
     case "PREMIUM":
-      return [
-        "PREMIUM tier — full agenda-based structure, formal register:",
-        "- Identify distinct agenda items from the transcript, in order, and reference them from discussionLog/decisions/votes via agendaItemRef (matching agendaItems[].order).",
-        "- Populate decisions and votes wherever the transcript actually supports them.",
-        "- Write executiveSummary and closingNotes in a formal legal register — precise, neutral, procedurally careful language suitable for a document that may be signed and relied upon.",
-      ].join("\n");
+      return "PREMIUM: full agenda structure (agendaItems ordered; discussionLog/decisions/votes reference them via agendaItemRef). Fill decisions/votes where the transcript supports them. executiveSummary + closingNotes in a formal legal register.";
     case "SCOPE":
     default:
-      return [
-        "SCOPE tier — full agenda-based structure:",
-        "- Identify distinct agenda items from the transcript, in order, and reference them from discussionLog/decisions/votes via agendaItemRef (matching agendaItems[].order).",
-        "- Populate decisions and votes wherever the transcript actually supports them.",
-      ].join("\n");
+      return "SCOPE: full agenda structure (agendaItems ordered; discussionLog/decisions/votes reference them via agendaItemRef). Fill decisions/votes where the transcript supports them.";
   }
 }
 
+// Kept intentionally terse — every word here is prompt overhead sent on
+// every call. Field names must stay exact (they're the actual contract).
 const RESPONSE_SHAPE = `{
   "content": {
     "coverInfo": { "company": string, "meetingTitle": string, "date": string, "region": string, "governingBody": string },
@@ -160,6 +181,9 @@ const RESPONSE_SHAPE = `{
   "numericalData": [ { "label": string, "value": string, "context": string } ]
 }`;
 
+// NOTE: supporting-document text is deliberately not a param here — see
+// the comment in generateReportContent. Re-add a supportingDocs param and
+// section when that scope cut is reversed.
 function buildPrompt(input: {
   company: string;
   region: string;
@@ -169,14 +193,7 @@ function buildPrompt(input: {
   outputLanguage: string;
   tier: string;
   transcriptText: string;
-  supportingDocs: { fileName: string; text: string }[];
 }): string {
-  const supportingSection = input.supportingDocs.length
-    ? input.supportingDocs
-        .map((doc) => `--- ${doc.fileName} ---\n${doc.text}`)
-        .join("\n\n")
-    : null;
-
   return `MEETING METADATA
 Company: ${input.company}
 Region: ${input.region}
@@ -186,81 +203,168 @@ Title: ${input.title}
 Output language: ${input.outputLanguage}
 Report tier: ${input.tier}
 
-TIER INSTRUCTIONS
-${tierInstructions(input.tier)}
+TIER: ${tierInstructions(input.tier)}
 
-LANGUAGE INSTRUCTIONS
-Write all narrative fields (executiveSummary, discussionLog text, proceduralNotes, closingNotes, attendance/agenda labels) in ${input.outputLanguage}. Do NOT translate legal or regulatory citations, article numbers, or statutory references — keep those tied to the ${input.region} jurisdiction exactly as they would actually be cited there, regardless of the output language.
+LANGUAGE: write narrative fields in ${input.outputLanguage}. Keep legal/regulatory citations tied to the ${input.region} jurisdiction in their original, untranslated form.
 
-MEETING TRANSCRIPT (chronological, diarized where available — this is the primary source of truth)
+TRANSCRIPT (chronological, diarized where available — primary source of truth):
 ${input.transcriptText}
 
-${
-  supportingSection
-    ? `SUPPORTING REFERENCE DOCUMENTS (context only — these are NOT the meeting transcript and nothing in them was said at the meeting; use them only to cross-check policies, figures or prior minutes referenced in the discussion)\n${supportingSection}`
-    : "No supporting documents were provided for this meeting."
-}
-
-OUTPUT FORMAT
-Respond with a single JSON object with EXACTLY this shape (no extra top-level keys, no missing keys):
+OUTPUT FORMAT — respond with ONE JSON object, exactly this shape:
 ${RESPONSE_SHAPE}
 
-Base attendance, agendaItems, discussionLog, decisions, votes, speakerAnalytics and numericalData strictly on what is actually present in the transcript above. speakerAnalytics.onTopicScore is 0-100, your judgment of how much of that speaker's contributions were relevant to the agenda vs. tangential. numericalData covers any figures, amounts, counts, dates or metrics mentioned in the transcript (vote tallies, budget figures, headcounts, deadlines, etc). Do not invent names, votes or figures that are not there — if a field genuinely has no material, use an empty array (or an honest short string) rather than fabricating content.`;
+Base every field strictly on the transcript above — no invented names, votes, or figures. onTopicScore is 0-100. numericalData covers any figures/amounts/counts/dates mentioned. Use an empty array or a short honest note instead of fabricating content.`;
 }
 
 const SYSTEM_PROMPT =
   "You are Attesta's report-generation engine. You turn a meeting transcript (plus optional supporting reference documents) into structured statutory meeting minutes. You always respond with a single valid JSON object and nothing else — no markdown code fences, no commentary before or after the JSON.";
 
-async function callModelForJson(prompt: string): Promise<GeneratedReport> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) {
-    throw new Error("DEEPSEEK_API_KEY is not set.");
-  }
+// Gemini is the sole provider. Groq (12K TPM free-tier cap) and NIM
+// (shared-pool hard capacity ceiling — "Worker local total request limit
+// reached (49/48)") were both confirmed unable to handle this app's real
+// prompt sizes (~40-50K tokens) even after prompt-size reduction work.
+// Gemini's free tier has a large-enough TPM ceiling (hundreds of thousands
+// to 1M+, not a shared community pool) for this app's actual usage pattern
+// — occasional, single-request, admin-triggered report generation. Its low
+// RPM/RPD free-tier caps are request-count limits, not the token-volume
+// limit that was the actual blocker, so they don't bind here.
+const GEMINI_MODEL = "gemini-3.5-flash";
 
-  const first = await callDeepSeek(prompt, apiKey);
+function resolveGeminiApiKey(): string {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set.");
+  }
+  return apiKey;
+}
+
+// Retry on transient-looking failures (rate limits, timeouts, 5xx) before
+// giving up.
+const TRANSIENT_RETRY_ATTEMPTS = 3;
+const TRANSIENT_RETRY_DELAY_MS = 15_000;
+
+function isTransientProviderError(message: string): boolean {
+  return /429|503|RESOURCE_EXHAUSTED|UNAVAILABLE|Service Unavailable|timed out/i.test(
+    message
+  );
+}
+
+async function callModelForJson(prompt: string): Promise<GeneratedReport> {
+  const apiKey = resolveGeminiApiKey();
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= TRANSIENT_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const result = await callProviderWithRetry(apiKey, prompt);
+      return { ...result, generatedBy: "gemini" };
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const isLastAttempt = attempt === TRANSIENT_RETRY_ATTEMPTS;
+      if (!isTransientProviderError(message) || isLastAttempt) {
+        throw error;
+      }
+      console.error(
+        `[report-generation] gemini attempt ${attempt}/${TRANSIENT_RETRY_ATTEMPTS} hit a transient error (${message}) — retrying in ${TRANSIENT_RETRY_DELAY_MS / 1000}s.`
+      );
+      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
+    }
+  }
+  throw lastError;
+}
+
+// If the response isn't valid JSON, retry once with a stricter
+// no-markdown-fences instruction before giving up entirely.
+async function callProviderWithRetry(
+  apiKey: string,
+  prompt: string
+): Promise<Omit<GeneratedReport, "generatedBy">> {
+  const first = await callChatCompletion(apiKey, prompt);
   const parsed = tryParseJson(first);
   if (parsed) return validateShape(parsed);
 
-  // First response wasn't valid JSON — retry once with a stricter,
-  // no-markdown-fences instruction rather than silently storing garbage.
   const strictPrompt = `${prompt}\n\nIMPORTANT: Your previous response was not valid JSON. Return ONLY a single valid JSON object — no markdown code fences (no \`\`\`), no commentary, no explanation. The response must start with { and end with }.`;
-  const second = await callDeepSeek(strictPrompt, apiKey);
+  const second = await callChatCompletion(apiKey, strictPrompt);
   const parsedSecond = tryParseJson(second);
   if (parsedSecond) return validateShape(parsedSecond);
 
   throw new Error(
-    "Model did not return valid JSON after one retry — aborting rather than storing malformed content."
+    "gemini did not return valid JSON after one retry — aborting rather than storing malformed content."
   );
 }
 
-async function callDeepSeek(prompt: string, apiKey: string): Promise<string> {
-  const res = await fetch(DEEPSEEK_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: 8000,
-    }),
+// 240s was tuned for the old Groq/NIM setup and proved too tight for
+// Gemini on this app's ~37K-token prompts with a 16K max-output JSON
+// response — observed two clean 240s timeouts back to back with no error
+// content, i.e. the request was still in flight, not stuck/erroring.
+const PROVIDER_TIMEOUT_MS = 400_000;
+
+async function callChatCompletion(apiKey: string, prompt: string): Promise<string> {
+  // Next.js patches the global fetch for its data cache, and in practice
+  // that patched fetch does not reliably honor an AbortSignal here — a
+  // signal-based timeout was observed to never fire. Race against a plain
+  // timer instead so this function itself always settles within the
+  // budget, regardless of what the abandoned fetch does afterwards.
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(
+      () =>
+        reject(new Error(`gemini request timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`)),
+      PROVIDER_TIMEOUT_MS
+    );
   });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  let res: Response;
+  try {
+    res = await Promise.race([
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 16384,
+            responseMimeType: "application/json",
+          },
+        }),
+      }),
+      timeout,
+    ]);
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : `gemini request failed: ${String(error)}`
+    );
+  }
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`DeepSeek API error ${res.status}: ${body.slice(0, 500)}`);
+    throw new Error(`gemini API error ${res.status}: ${body.slice(0, 500)}`);
   }
 
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content || typeof content !== "string") {
-    throw new Error("DeepSeek returned no content.");
+
+  const blockReason = data.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new Error(`gemini blocked the prompt: ${blockReason}`);
+  }
+
+  const candidate = data.candidates?.[0];
+  const content: string | undefined = candidate?.content?.parts
+    ?.map((p: { text?: string }) => p.text ?? "")
+    .join("");
+  if (!content) {
+    throw new Error("gemini returned no content.");
+  }
+  // A real meeting's full discussionLog/speakerAnalytics/numericalData can
+  // be large — surface a truncation clearly rather than a confusing JSON
+  // parse failure downstream.
+  if (candidate?.finishReason === "MAX_TOKENS") {
+    throw new Error(
+      "gemini response was truncated at the max output token limit — the report content is too large for the current cap and needs a bigger limit or a more compressed prompt."
+    );
   }
   return content;
 }
@@ -278,7 +382,7 @@ function tryParseJson(text: string): unknown | null {
   }
 }
 
-function validateShape(parsed: unknown): GeneratedReport {
+function validateShape(parsed: unknown): Omit<GeneratedReport, "generatedBy"> {
   if (
     !parsed ||
     typeof parsed !== "object" ||
@@ -291,5 +395,5 @@ function validateShape(parsed: unknown): GeneratedReport {
   ) {
     throw new Error("Model JSON did not match the expected report shape.");
   }
-  return parsed as GeneratedReport;
+  return parsed as Omit<GeneratedReport, "generatedBy">;
 }
