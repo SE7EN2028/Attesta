@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/container";
 import { ScrollProgress } from "@/components/scroll-progress";
 
+// Root-relative hashes so the nav works from any route (e.g. /create, /try),
+// not just the homepage — clicking routes to "/" and scrolls to the section.
 const links = [
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#live-preview", label: "Live preview" },
-  { href: "#audit", label: "The audit" },
-  { href: "#sample-report", label: "Sample report" },
-  { href: "#security", label: "Security" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#live-preview", label: "Live preview" },
+  { href: "/#audit", label: "The audit" },
+  { href: "/#sample-report", label: "Sample report" },
+  { href: "/#security", label: "Security" },
 ];
 
 export function Nav() {

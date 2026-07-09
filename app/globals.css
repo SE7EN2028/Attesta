@@ -62,6 +62,9 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Offset anchor jumps by the sticky nav height (h-20 = 5rem) plus a little
+       breathing room, so #section links don't land under the nav. */
+    scroll-padding-top: 6rem;
   }
   body {
     background-color: var(--color-ink-900);

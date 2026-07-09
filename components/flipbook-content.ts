@@ -309,6 +309,7 @@ function fmtDate(f: LiveForm) {
 
 export function buildLiveSample(f: LiveForm): string[] {
   const title = f.title || "Untitled meeting";
+  const isGeneral = f.region === "General";
   return [
     cover({
       kicker: "Instant preview · " + f.body,
@@ -360,18 +361,31 @@ export function buildLiveSample(f: LiveForm): string[] {
       bar("H1 2026", 68, AMB, "4.1 %") +
       bar("Target", 60, GRN, "3.6 %")
     ),
-    pg(
-      rh("3 / Compliance safety check", f.region + " · " + f.body) +
-      h("Early flags — not the full audit") +
-      chk("ok", "Quorum stated on the record") +
-      chk("ok", "Agenda announced and followed") +
-      chk("warn", "A vote is mentioned without a headcount") +
-      chk("no", "No reference to the consultation deadline") +
-      rule +
-      p(
-        "2 flags to watch. The full, finding-by-finding audit ships with your delivered report."
-      )
-    ),
+    isGeneral
+      ? pg(
+          rh("3 / Compliance safety check", f.region) +
+          h("Not applicable for General reports") +
+          p(
+            "General reports aren't checked against any regulatory or works-council framework, so there's no compliance audit — no rule-set findings, no legal references.",
+            "margin-bottom:8px"
+          ) +
+          rule +
+          p(
+            "Pick a specific region (e.g. France) to see the compliance audit in the preview."
+          )
+        )
+      : pg(
+          rh("3 / Compliance safety check", f.region + " · " + f.body) +
+          h("Early flags — not the full audit") +
+          chk("ok", "Quorum stated on the record") +
+          chk("ok", "Agenda announced and followed") +
+          chk("warn", "A vote is mentioned without a headcount") +
+          chk("no", "No reference to the consultation deadline") +
+          rule +
+          p(
+            "2 flags to watch. The full, finding-by-finding audit ships with your delivered report."
+          )
+        ),
     pg(
       rh("Next step", "p. 6") +
       '<div style="margin:10% 0 10px">' +

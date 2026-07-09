@@ -1,4 +1,5 @@
 import { Nav } from "@/components/nav";
+import { HashScroll } from "@/components/hash-scroll";
 import { Hero } from "@/components/hero";
 import { ProblemSection } from "@/components/problem-section";
 import { HowItWorks } from "@/components/how-it-works";
@@ -16,6 +17,7 @@ import { Footer } from "@/components/footer";
 export default function Home() {
   return (
     <>
+      <HashScroll />
       <Nav />
       <main>
         <Hero />

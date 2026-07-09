@@ -135,18 +135,32 @@ export function LivePreviewSection() {
                 <span className={labelCls}>Region</span>
                 <select
                   value={form.region}
-                  onChange={(e) => set({ region: e.target.value })}
+                  onChange={(e) => {
+                    const region = e.target.value;
+                    // General has no jurisdiction-specific body; keep the two
+                    // fields coherent as the region changes.
+                    if (region === "General") set({ region, body: "General" });
+                    else
+                      set({
+                        region,
+                        body: form.body === "General" ? "CSE" : form.body,
+                      });
+                  }}
                   className={inputCls}
                 >
+                  <option value="General">General</option>
                   <option value="France">France — live</option>
-                  <option value="Germany" disabled>
-                    Germany — coming soon
+                  <option value="Germany">Germany — live</option>
+                  <option value="Belgium">Belgium — live</option>
+                  <option value="Netherlands">Netherlands — live</option>
+                  <option value="UK" disabled>
+                    UK — coming soon
                   </option>
-                  <option value="Belgium" disabled>
-                    Belgium — coming soon
+                  <option value="USA" disabled>
+                    USA — coming soon
                   </option>
-                  <option value="Netherlands" disabled>
-                    Netherlands — coming soon
+                  <option value="Canada" disabled>
+                    Canada — coming soon
                   </option>
                 </select>
               </label>
@@ -157,6 +171,7 @@ export function LivePreviewSection() {
                   onChange={(e) => set({ body: e.target.value })}
                   className={inputCls}
                 >
+                  <option value="General">Standard meeting</option>
                   <option value="CSE">CSE — works council</option>
                   <option value="CSSCT">CSSCT — health &amp; safety</option>
                   <option value="HR">HR — internal meeting</option>

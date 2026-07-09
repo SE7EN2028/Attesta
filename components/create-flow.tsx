@@ -292,6 +292,7 @@ export function CreateFlow({
       meetingDate: state.meetingDate,
       title: state.title,
       outputLanguage: state.outputLanguage,
+      meetingRequestId: state.meetingRequestId ?? undefined,
     });
     if (!result.ok) {
       dispatch({ type: "SET_ERROR", error: result.error });
@@ -904,13 +905,22 @@ export function CreateFlow({
 
             {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
 
-            <Button
-              className="mt-6 w-full"
-              disabled={!state.sourceFile || state.submitting}
-              onClick={() => dispatch({ type: "GO_TO", step: 4 })}
-            >
-              Continue
-            </Button>
+            <div className="mt-6 flex gap-3">
+              <Button
+                variant="outline"
+                disabled={state.submitting}
+                onClick={() => dispatch({ type: "GO_TO", step: 2 })}
+              >
+                ← Back
+              </Button>
+              <Button
+                className="flex-1"
+                disabled={!state.sourceFile || state.submitting}
+                onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+              >
+                Continue
+              </Button>
+            </div>
           </div>
 
           <SummaryCard state={state} />
@@ -974,17 +984,25 @@ export function CreateFlow({
 
           {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
 
-          <Button
-            className="mt-6"
-            disabled={!state.tier || state.submitting || live !== null}
-            onClick={handleSubmit}
-          >
-            {mode === "live"
-              ? "Generate report now →"
-              : state.submitting
-                ? "Submitting…"
-                : "Submit request"}
-          </Button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              disabled={state.submitting || live !== null}
+              onClick={() => dispatch({ type: "GO_TO", step: 3 })}
+            >
+              ← Back
+            </Button>
+            <Button
+              disabled={!state.tier || state.submitting || live !== null}
+              onClick={handleSubmit}
+            >
+              {mode === "live"
+                ? "Generate report now →"
+                : state.submitting
+                  ? "Submitting…"
+                  : "Submit request"}
+            </Button>
+          </div>
         </div>
       )}
     </Container>
@@ -1066,7 +1084,20 @@ function LabeledInput({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded border border-cream-200/15 bg-ink-900 px-3 py-2 text-[13px] text-cream-100"
+        // For date inputs, clicking anywhere on the field opens the native
+        // picker (not just the small calendar icon).
+        onClick={
+          type === "date"
+            ? (e) => {
+                const el = e.currentTarget;
+                if (typeof el.showPicker === "function") el.showPicker();
+              }
+            : undefined
+        }
+        className={cn(
+          "mt-1.5 w-full rounded border border-cream-200/15 bg-ink-900 px-3 py-2 text-[13px] text-cream-100",
+          type === "date" && "cursor-pointer"
+        )}
       />
     </div>
   );

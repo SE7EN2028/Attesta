@@ -56,6 +56,9 @@ export async function createDraftMeetingRequest(input: {
   meetingDate: string;
   title: string;
   outputLanguage: string;
+  // Passed when the user has stepped back and re-submits the metadata step —
+  // update the existing draft in place instead of creating a duplicate.
+  meetingRequestId?: string;
 }): Promise<ActionResult<{ id: string }>> {
   const userId = getSessionUserId();
   if (!userId) return { ok: false, error: "Sign up first." };
@@ -79,15 +82,33 @@ export async function createDraftMeetingRequest(input: {
     return { ok: false, error: "Invalid meeting date." };
   }
 
+  const data = {
+    company: company.trim(),
+    region: region.trim(),
+    governingBody: governingBody.trim(),
+    meetingDate: parsedDate,
+    title: title.trim(),
+    outputLanguage: outputLanguage.trim(),
+  };
+
+  // Re-editing metadata after stepping back: update the existing owned draft.
+  if (input.meetingRequestId) {
+    const existing = await prisma.meetingRequest.findFirst({
+      where: { id: input.meetingRequestId, userId, status: "DRAFT" },
+    });
+    if (existing) {
+      const updated = await prisma.meetingRequest.update({
+        where: { id: existing.id },
+        data,
+      });
+      return { ok: true, data: { id: updated.id } };
+    }
+  }
+
   const meetingRequest = await prisma.meetingRequest.create({
     data: {
       userId,
-      company: company.trim(),
-      region: region.trim(),
-      governingBody: governingBody.trim(),
-      meetingDate: parsedDate,
-      title: title.trim(),
-      outputLanguage: outputLanguage.trim(),
+      ...data,
       // Placeholder — the user picks the real tier in step 4; this row
       // exists early only so a SourceFile has somewhere to attach to.
       tier: "ESSENTIAL",
