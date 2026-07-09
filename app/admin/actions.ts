@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { transcribeSourceFile } from "@/lib/transcription";
 import {
@@ -10,6 +11,11 @@ import {
 export type ActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+// Auth is mocked in this build and there's no admin identity, so the
+// specialist who locks a report is recorded as a fixed "admin". Real auth
+// would replace this with the signed-in reviewer.
+const LOCKED_BY = "admin";
 
 export async function runTranscription(
   meetingRequestId: string
@@ -148,4 +154,55 @@ export async function runReportGeneration(
       error instanceof Error ? error.message : "Report generation failed.";
     return { ok: false, error: message };
   }
+}
+
+// Locks a drafted report: freezes the draft (Report.status LOCKED, stamps
+// lockedAt/lockedBy) and moves the meeting request to LOCKED. This is the
+// step that makes a report eligible to surface as the public /samples
+// entry. Idempotent-ish: re-locking an already-locked report is a no-op
+// that just returns the current lock metadata.
+export async function lockReport(
+  meetingRequestId: string
+): Promise<ActionResult<{ status: string; lockedAt: string; lockedBy: string }>> {
+  const report = await prisma.report.findUnique({
+    where: { meetingRequestId },
+  });
+  if (!report) {
+    return { ok: false, error: "No report to lock for this request." };
+  }
+  if (report.status === "LOCKED") {
+    return {
+      ok: true,
+      data: {
+        status: report.status,
+        lockedAt: (report.lockedAt ?? report.updatedAt).toISOString(),
+        lockedBy: report.lockedBy ?? LOCKED_BY,
+      },
+    };
+  }
+
+  const lockedAt = new Date();
+  const [locked] = await prisma.$transaction([
+    prisma.report.update({
+      where: { id: report.id },
+      data: { status: "LOCKED", lockedAt, lockedBy: LOCKED_BY },
+    }),
+    prisma.meetingRequest.update({
+      where: { id: meetingRequestId },
+      data: { status: "LOCKED" },
+    }),
+  ]);
+
+  revalidatePath("/admin");
+  revalidatePath("/samples");
+  revalidatePath(`/report/${report.id}`);
+
+  return {
+    ok: true,
+    data: {
+      status: locked.status,
+      lockedAt: (locked.lockedAt ?? lockedAt).toISOString(),
+      lockedBy: locked.lockedBy ?? LOCKED_BY,
+    },
+  };
 }

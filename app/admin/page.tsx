@@ -1,11 +1,33 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Nav } from "@/components/nav";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
-import { Button } from "@/components/ui/button";
 import { AdminSubmittedList } from "@/components/admin-submitted-list";
 import { AdminReviewList } from "@/components/admin-review-list";
+import { AdminCompletedList } from "@/components/admin-completed-list";
+
+type SourceFileLink = {
+  id: string;
+  fileName: string;
+  type: string;
+  role: string;
+};
+
+function toFileLinks(
+  sourceFiles: { id: string; fileName: string; type: string; role: string }[]
+): SourceFileLink[] {
+  // Primary meeting file first, supporting docs after.
+  return [...sourceFiles]
+    .sort((a, b) =>
+      a.role === "PRIMARY_MEETING" ? -1 : b.role === "PRIMARY_MEETING" ? 1 : 0
+    )
+    .map((f) => ({
+      id: f.id,
+      fileName: f.fileName,
+      type: f.type,
+      role: f.role,
+    }));
+}
 
 export default async function AdminPage() {
   const submitted = await prisma.meetingRequest.findMany({
@@ -31,6 +53,7 @@ export default async function AdminPage() {
         ? { fileName: primary.fileName, type: primary.type }
         : null,
       supportingCount,
+      files: toFileLinks(mr.sourceFiles),
     };
   });
 
@@ -53,6 +76,7 @@ export default async function AdminPage() {
       supportingCount: mr.sourceFiles.filter(
         (f) => f.role === "SUPPORTING_DOCUMENT"
       ).length,
+      files: toFileLinks(mr.sourceFiles),
     }));
 
   const withReport = await prisma.meetingRequest.findMany({
@@ -60,6 +84,17 @@ export default async function AdminPage() {
     include: { report: true, user: true },
     orderBy: { updatedAt: "desc" },
   });
+
+  const completedRows = withReport.map((mr) => ({
+    meetingRequestId: mr.id,
+    reportId: mr.report!.id,
+    title: mr.title,
+    company: mr.company,
+    ownerEmail: mr.user.email,
+    tier: mr.tier,
+    reportStatus: mr.report!.status,
+    lockedBy: mr.report!.lockedBy,
+  }));
 
   return (
     <>
@@ -97,37 +132,13 @@ export default async function AdminPage() {
             Completed reports
           </h2>
           <p className="mt-3 max-w-xl text-[15px] text-cream-300">
-            Drafted reports, ready to view in the report viewer.
+            Drafted reports, ready to view in the report viewer. Locking a
+            report freezes the draft, stamps the sign-off, and makes it
+            eligible to appear as the public sample.
           </p>
 
-          <div className="mt-10 space-y-4">
-            {withReport.length === 0 ? (
-              <p className="text-[14.5px] text-cream-400">
-                No reports generated yet.
-              </p>
-            ) : (
-              withReport.map((mr) => (
-                <div
-                  key={mr.id}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-cream-200/10 bg-ink-850 p-6"
-                >
-                  <div>
-                    <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-rust-400">
-                      {mr.tier} · {mr.report!.status}
-                    </p>
-                    <h3 className="mt-1 font-serif text-lg text-cream-100">
-                      {mr.title}
-                    </h3>
-                    <p className="mt-1 text-[13px] text-cream-400">
-                      {mr.company} · {mr.user.email}
-                    </p>
-                  </div>
-                  <Button asChild size="sm">
-                    <Link href={`/report/${mr.report!.id}`}>View report</Link>
-                  </Button>
-                </div>
-              ))
-            )}
+          <div className="mt-10">
+            <AdminCompletedList initialRows={completedRows} />
           </div>
         </Container>
       </main>

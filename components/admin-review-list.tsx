@@ -4,6 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { runReportGeneration } from "@/app/admin/actions";
 import type { GeneratedReport } from "@/lib/report-generation";
+import {
+  SourceFileLinks,
+  type SourceFileLink,
+} from "@/components/source-file-links";
 
 type Row = {
   id: string;
@@ -12,6 +16,7 @@ type Row = {
   tier: string;
   ownerEmail: string;
   supportingCount: number;
+  files: SourceFileLink[];
 };
 
 type RowState =
@@ -67,12 +72,9 @@ export function AdminReviewList({ initialRows }: { initialRows: Row[] }) {
                 <p className="mt-1 text-[13px] text-cream-400">
                   {row.company} · {row.ownerEmail}
                 </p>
-                {row.supportingCount > 0 && (
-                  <p className="mt-1 font-mono text-[11px] text-rust-400">
-                    + {row.supportingCount} supporting doc
-                    {row.supportingCount === 1 ? "" : "s"}
-                  </p>
-                )}
+                <div className="mt-3">
+                  <SourceFileLinks files={row.files} />
+                </div>
               </div>
 
               <Button

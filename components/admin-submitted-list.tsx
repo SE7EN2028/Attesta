@@ -4,6 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { runTranscription } from "@/app/admin/actions";
+import {
+  SourceFileLinks,
+  type SourceFileLink,
+} from "@/components/source-file-links";
 
 type Row = {
   id: string;
@@ -14,6 +18,7 @@ type Row = {
   createdAt: string;
   sourceFile: { fileName: string; type: string } | null;
   supportingCount: number;
+  files: SourceFileLink[];
 };
 
 type RowState =
@@ -73,18 +78,9 @@ export function AdminSubmittedList({ initialRows }: { initialRows: Row[] }) {
                 <p className="mt-1 text-[13px] text-cream-400">
                   {row.company} · {row.ownerEmail}
                 </p>
-                <p className="mt-1 font-mono text-[11px] text-cream-500">
-                  {row.sourceFile
-                    ? `${row.sourceFile.fileName} · ${row.sourceFile.type}`
-                    : "No source file"}
-                  {row.supportingCount > 0 && (
-                    <span className="text-rust-400">
-                      {" "}
-                      · + {row.supportingCount} supporting doc
-                      {row.supportingCount === 1 ? "" : "s"}
-                    </span>
-                  )}
-                </p>
+                <div className="mt-3">
+                  <SourceFileLinks files={row.files} />
+                </div>
               </div>
 
               <Button

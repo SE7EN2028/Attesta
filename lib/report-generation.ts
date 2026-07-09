@@ -408,6 +408,29 @@ function tryParseJson(text: string): unknown | null {
   }
 }
 
+// Some early seed/fixture rows predate the current ReportContent schema
+// (e.g. attendance as a summary object instead of an array, agendaItems as
+// plain strings). The viewer is built against the real generation
+// pipeline's shape, so callers guard with this before rendering rather than
+// crashing. Shared by /report/[id] and /samples.
+export function isRenderableReportContent(
+  content: unknown
+): content is ReportContent {
+  if (!content || typeof content !== "object") return false;
+  const c = content as Record<string, unknown>;
+  const coverInfo = c.coverInfo as Record<string, unknown> | undefined;
+  return (
+    typeof coverInfo?.meetingTitle === "string" &&
+    typeof coverInfo?.company === "string" &&
+    Array.isArray(c.attendance) &&
+    Array.isArray(c.agendaItems) &&
+    Array.isArray(c.discussionLog) &&
+    Array.isArray(c.decisions) &&
+    Array.isArray(c.votes) &&
+    Array.isArray(c.proceduralNotes)
+  );
+}
+
 function validateShape(parsed: unknown): Omit<GeneratedReport, "generatedBy"> {
   if (
     !parsed ||

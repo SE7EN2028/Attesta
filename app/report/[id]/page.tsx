@@ -4,31 +4,12 @@ import { Nav } from "@/components/nav";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
 import { ReportViewer } from "@/components/report/report-viewer";
-import type {
-  ReportContent,
-  SpeakerAnalytics,
-  NumericalData,
+import {
+  isRenderableReportContent,
+  type ReportContent,
+  type SpeakerAnalytics,
+  type NumericalData,
 } from "@/lib/report-generation";
-
-// Some early seed/fixture rows predate the current ReportContent schema
-// (e.g. attendance as a summary object instead of an array, agendaItems as
-// plain strings) — the viewer is built against the real generation
-// pipeline's shape, so guard against those here rather than crashing.
-function isRenderableContent(content: unknown): content is ReportContent {
-  if (!content || typeof content !== "object") return false;
-  const c = content as Record<string, unknown>;
-  const coverInfo = c.coverInfo as Record<string, unknown> | undefined;
-  return (
-    typeof coverInfo?.meetingTitle === "string" &&
-    typeof coverInfo?.company === "string" &&
-    Array.isArray(c.attendance) &&
-    Array.isArray(c.agendaItems) &&
-    Array.isArray(c.discussionLog) &&
-    Array.isArray(c.decisions) &&
-    Array.isArray(c.votes) &&
-    Array.isArray(c.proceduralNotes)
-  );
-}
 
 export default async function ReportPage({
   params,
@@ -46,7 +27,7 @@ export default async function ReportPage({
     notFound();
   }
 
-  if (!isRenderableContent(report.content)) {
+  if (!isRenderableReportContent(report.content)) {
     return (
       <>
         <Nav />

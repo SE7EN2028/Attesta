@@ -109,7 +109,18 @@ export function ReportViewer({
     <Container>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Eyebrow>Report</Eyebrow>
+          <div className="flex items-center gap-3">
+            <Eyebrow>Report</Eyebrow>
+            {status === "LOCKED" ? (
+              <span className="rounded-full border border-green-400/30 bg-green-400/5 px-3 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-green-400">
+                Locked &amp; signed
+              </span>
+            ) : (
+              <span className="rounded-full border border-cream-200/20 bg-cream-200/5 px-3 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-cream-400">
+                Draft · not yet locked
+              </span>
+            )}
+          </div>
           <h1 className="mt-5 font-serif text-3xl text-cream-100 md:text-4xl">
             {content.coverInfo.meetingTitle}
           </h1>
