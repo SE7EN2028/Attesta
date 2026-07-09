@@ -251,7 +251,10 @@ const SYSTEM_PROMPT =
 // — occasional, single-request, admin-triggered report generation. Its low
 // RPM/RPD free-tier caps are request-count limits, not the token-volume
 // limit that was the actual blocker, so they don't bind here.
-const GEMINI_MODEL = "gemini-3.5-flash";
+// Overridable via GEMINI_MODEL env. Default is gemini-2.5-flash — the
+// previous default (gemini-3.5-flash) was persistently returning 503
+// "high demand", so it's no longer the target.
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 function resolveGeminiApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY;

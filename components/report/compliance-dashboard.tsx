@@ -45,8 +45,13 @@ function ScoreRing({ score }: { score: number }) {
   const offset = circumference * (1 - score / 100);
   const color = scoreColor(score);
 
+  // Rotate only the arc (via SVG transform on the circles) so the progress
+  // starts at 12 o'clock, keeping the score text upright. Rotating the whole
+  // <svg> with a CSS class rendered the number sideways.
+  const arcTransform = `rotate(-90 ${size / 2} ${size / 2})`;
+
   return (
-    <svg width={size} height={size} className="-rotate-90">
+    <svg width={size} height={size}>
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -54,6 +59,7 @@ function ScoreRing({ score }: { score: number }) {
         fill="none"
         stroke="rgba(233,229,218,0.1)"
         strokeWidth={stroke}
+        transform={arcTransform}
       />
       <circle
         cx={size / 2}
@@ -65,14 +71,13 @@ function ScoreRing({ score }: { score: number }) {
         strokeDasharray={circumference}
         strokeDashoffset={offset}
         strokeLinecap="round"
+        transform={arcTransform}
       />
       <text
         x={size / 2}
         y={size / 2}
         textAnchor="middle"
         dominantBaseline="middle"
-        className="rotate-90"
-        style={{ transformOrigin: "center", transform: "rotate(90deg)" }}
         fill="#f2efe6"
         fontSize="28"
         fontFamily="var(--font-serif)"
