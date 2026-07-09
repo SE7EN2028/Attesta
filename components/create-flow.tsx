@@ -30,6 +30,7 @@ type FlowState = {
   title: string;
   outputLanguage: string;
   sourceFile: { fileName: string; type: string } | null;
+  supportingFiles: { fileName: string; type: string }[];
   tier: Tier | null;
   notes: string;
   submitting: boolean;
@@ -57,6 +58,7 @@ type Action =
     }
   | { type: "DRAFT_CREATED"; meetingRequestId: string }
   | { type: "FILE_UPLOADED"; fileName: string; fileType: string }
+  | { type: "SUPPORTING_FILE_UPLOADED"; fileName: string; fileType: string }
   | { type: "SET_TIER"; tier: Tier }
   | { type: "GO_TO"; step: Step }
   | { type: "RESET_SOURCE_FILE" }
@@ -91,6 +93,16 @@ function reducer(state: FlowState, action: Action): FlowState {
       return {
         ...state,
         sourceFile: { fileName: action.fileName, type: action.fileType },
+        submitting: false,
+        error: null,
+      };
+    case "SUPPORTING_FILE_UPLOADED":
+      return {
+        ...state,
+        supportingFiles: [
+          ...state.supportingFiles,
+          { fileName: action.fileName, type: action.fileType },
+        ],
         submitting: false,
         error: null,
       };
@@ -166,6 +178,7 @@ const TIERS: { value: Tier; name: string; features: string[] }[] = [
 ];
 
 const ACCEPTED_EXTENSIONS = [".mp3", ".mp4", ".wav", ".m4a", ".docx", ".pdf"];
+const SUPPORTING_DOC_EXTENSIONS = [".docx", ".pdf"];
 
 function initialState(
   initialUser: { id: string; email: string; companyName: string } | null
@@ -183,6 +196,7 @@ function initialState(
     title: "",
     outputLanguage: "",
     sourceFile: null,
+    supportingFiles: [],
     tier: null,
     notes: "",
     submitting: false,
@@ -197,7 +211,9 @@ export function CreateFlow({
 }) {
   const [state, dispatch] = useReducer(reducer, initialUser, initialState);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const supportingInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [draggingSupporting, setDraggingSupporting] = useState(false);
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
@@ -245,6 +261,7 @@ export function CreateFlow({
     dispatch({ type: "SET_SUBMITTING", submitting: true });
     const formData = new FormData();
     formData.set("meetingRequestId", state.meetingRequestId);
+    formData.set("role", "PRIMARY_MEETING");
     formData.set("file", file);
     const result = await uploadSourceFile(formData);
     if (!result.ok) {
@@ -256,6 +273,37 @@ export function CreateFlow({
       fileName: result.data.fileName,
       fileType: result.data.type,
     });
+  }
+
+  async function handleSupportingFiles(files: File[]) {
+    if (!state.meetingRequestId) return;
+
+    for (const file of files) {
+      const extension = "." + file.name.split(".").pop()?.toLowerCase();
+      if (!SUPPORTING_DOC_EXTENSIONS.includes(extension)) {
+        dispatch({
+          type: "SET_ERROR",
+          error: "Supporting documents must be DOCX or PDF.",
+        });
+        continue;
+      }
+
+      dispatch({ type: "SET_SUBMITTING", submitting: true });
+      const formData = new FormData();
+      formData.set("meetingRequestId", state.meetingRequestId);
+      formData.set("role", "SUPPORTING_DOCUMENT");
+      formData.set("file", file);
+      const result = await uploadSourceFile(formData);
+      if (!result.ok) {
+        dispatch({ type: "SET_ERROR", error: result.error });
+        continue;
+      }
+      dispatch({
+        type: "SUPPORTING_FILE_UPLOADED",
+        fileName: result.data.fileName,
+        fileType: result.data.type,
+      });
+    }
   }
 
   async function handleSubmit() {
@@ -581,6 +629,79 @@ export function CreateFlow({
                 </button>
               </div>
             )}
+
+            <div className="mt-8 border-t border-cream-200/10 pt-6">
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-cream-500">
+                Supporting documents (optional) — policies, contracts, prior
+                minutes
+              </p>
+
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDraggingSupporting(true);
+                }}
+                onDragLeave={() => setDraggingSupporting(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDraggingSupporting(false);
+                  const files = Array.from(e.dataTransfer.files ?? []);
+                  if (files.length) void handleSupportingFiles(files);
+                }}
+                className={cn(
+                  "mt-2 rounded-md border-2 border-dashed p-6 text-center transition-colors",
+                  draggingSupporting
+                    ? "border-rust-400/60 bg-rust-400/5"
+                    : "border-cream-200/15"
+                )}
+              >
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-cream-400">
+                  {state.submitting ? "Uploading…" : "Drag files here, or"}
+                </p>
+                {!state.submitting && (
+                  <button
+                    type="button"
+                    onClick={() => supportingInputRef.current?.click()}
+                    className="mt-2 font-mono text-[12px] text-rust-400 underline underline-offset-4"
+                  >
+                    browse your files
+                  </button>
+                )}
+                <input
+                  ref={supportingInputRef}
+                  type="file"
+                  accept={SUPPORTING_DOC_EXTENSIONS.join(",")}
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length) void handleSupportingFiles(files);
+                    e.target.value = "";
+                  }}
+                />
+                <p className="mt-3 font-mono text-[10px] text-cream-500">
+                  DOCX · PDF — multiple files allowed
+                </p>
+              </div>
+
+              {state.supportingFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {state.supportingFiles.map((f) => (
+                    <div
+                      key={f.fileName}
+                      className="flex items-center justify-between rounded border border-cream-200/10 px-4 py-2.5"
+                    >
+                      <span className="text-[13px] text-cream-200">
+                        {f.fileName}
+                      </span>
+                      <span className="font-mono text-[11px] text-cream-500">
+                        {f.type}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
 

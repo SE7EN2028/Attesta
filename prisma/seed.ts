@@ -47,7 +47,7 @@ async function main() {
       status: "IN_REVIEW",
       notes:
         "Elected members raised concerns about timeline, team transfers and load on the remaining site.",
-      sourceFile: {
+      sourceFiles: {
         create: {
           type: "AUDIO",
           fileName: "vireo_cse_02-10.mp3",
@@ -204,7 +204,7 @@ async function main() {
       tier: "PREMIUM",
       status: "LOCKED",
       notes: "Chair: A. Vasseur (management). Session secretary: C. Marchal.",
-      sourceFile: {
+      sourceFiles: {
         create: {
           type: "AUDIO",
           fileName: "reunion_cse_17-09_FINAL(2).mp3",

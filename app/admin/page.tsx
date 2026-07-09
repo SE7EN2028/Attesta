@@ -7,21 +7,29 @@ import { AdminSubmittedList } from "@/components/admin-submitted-list";
 export default async function AdminPage() {
   const submitted = await prisma.meetingRequest.findMany({
     where: { status: "SUBMITTED" },
-    include: { sourceFile: true, user: true },
+    include: { sourceFiles: true, user: true },
     orderBy: { createdAt: "asc" },
   });
 
-  const rows = submitted.map((mr) => ({
-    id: mr.id,
-    title: mr.title,
-    company: mr.company,
-    tier: mr.tier,
-    ownerEmail: mr.user.email,
-    createdAt: mr.createdAt.toISOString(),
-    sourceFile: mr.sourceFile
-      ? { fileName: mr.sourceFile.fileName, type: mr.sourceFile.type }
-      : null,
-  }));
+  const rows = submitted.map((mr) => {
+    const primary = mr.sourceFiles.find((f) => f.role === "PRIMARY_MEETING");
+    const supportingCount = mr.sourceFiles.filter(
+      (f) => f.role === "SUPPORTING_DOCUMENT"
+    ).length;
+
+    return {
+      id: mr.id,
+      title: mr.title,
+      company: mr.company,
+      tier: mr.tier,
+      ownerEmail: mr.user.email,
+      createdAt: mr.createdAt.toISOString(),
+      sourceFile: primary
+        ? { fileName: primary.fileName, type: primary.type }
+        : null,
+      supportingCount,
+    };
+  });
 
   return (
     <>

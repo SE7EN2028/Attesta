@@ -12,13 +12,16 @@ export async function runTranscription(
 ): Promise<ActionResult<{ rawText: string; speakerCount: number }>> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
-    include: { sourceFile: true },
+    include: { sourceFiles: true },
   });
 
   if (!meetingRequest) {
     return { ok: false, error: "Meeting request not found." };
   }
-  if (!meetingRequest.sourceFile) {
+  const primaryFile = meetingRequest.sourceFiles.find(
+    (f) => f.role === "PRIMARY_MEETING"
+  );
+  if (!primaryFile) {
     return { ok: false, error: "No source file uploaded for this request." };
   }
 
@@ -29,14 +32,14 @@ export async function runTranscription(
 
   try {
     const { rawText, speakerLabels, source } = await transcribeSourceFile(
-      meetingRequest.sourceFile
+      primaryFile
     );
 
     await prisma.transcript.upsert({
-      where: { sourceFileId: meetingRequest.sourceFile.id },
+      where: { sourceFileId: primaryFile.id },
       update: { rawText, speakerLabels, source },
       create: {
-        sourceFileId: meetingRequest.sourceFile.id,
+        sourceFileId: primaryFile.id,
         rawText,
         speakerLabels,
         source,

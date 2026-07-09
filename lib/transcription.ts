@@ -11,7 +11,7 @@ export type TranscriptionResult = {
   source: "DEEPGRAM" | "MANUAL";
 };
 
-function resolveUploadPath(storageUrl: string): string {
+export function resolveUploadPath(storageUrl: string): string {
   return path.join(process.cwd(), storageUrl.replace(/^\//, ""));
 }
 
@@ -26,12 +26,24 @@ export async function transcribeSourceFile(sourceFile: {
     case "VIDEO":
       return transcribeWithDeepgram(absolutePath);
     case "DOCX":
-      return extractDocx(absolutePath);
-    case "PDF":
-      return extractPdf(absolutePath);
+    case "PDF": {
+      const rawText = await extractPlainText(absolutePath, sourceFile.type);
+      return { rawText, speakerLabels: [], source: "MANUAL" };
+    }
     default:
       throw new Error(`Unsupported source file type: ${sourceFile.type}`);
   }
+}
+
+// Plain-text extraction with no transcription semantics — used both for
+// DOCX/PDF meeting sources above and for supporting documents, which only
+// ever need their raw text (see lib/transcription.ts callers in
+// app/create/actions.ts).
+export async function extractPlainText(
+  absolutePath: string,
+  type: "DOCX" | "PDF"
+): Promise<string> {
+  return type === "DOCX" ? extractDocx(absolutePath) : extractPdf(absolutePath);
 }
 
 async function transcribeWithDeepgram(
@@ -107,20 +119,20 @@ async function transcribeWithDeepgram(
   return { rawText, speakerLabels, source: "DEEPGRAM" };
 }
 
-async function extractDocx(absolutePath: string): Promise<TranscriptionResult> {
+async function extractDocx(absolutePath: string): Promise<string> {
   const mammoth = await import("mammoth");
   const buffer = await fs.readFile(absolutePath);
   const { value } = await mammoth.extractRawText({ buffer });
-  return { rawText: value.trim(), speakerLabels: [], source: "MANUAL" };
+  return value.trim();
 }
 
-async function extractPdf(absolutePath: string): Promise<TranscriptionResult> {
+async function extractPdf(absolutePath: string): Promise<string> {
   const { PDFParse } = await import("pdf-parse");
   const buffer = await fs.readFile(absolutePath);
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
-    return { rawText: result.text.trim(), speakerLabels: [], source: "MANUAL" };
+    return result.text.trim();
   } finally {
     await parser.destroy();
   }

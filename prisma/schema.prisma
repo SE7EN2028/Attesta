@@ -43,17 +43,23 @@ model MeetingRequest {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  sourceFile SourceFile?
-  report     Report?
+  sourceFiles SourceFile[]
+  report      Report?
 }
 
 model SourceFile {
   id               String   @id @default(cuid())
-  meetingRequestId String   @unique
+  meetingRequestId String
   meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id])
   type             String // "AUDIO" | "VIDEO" | "DOCX" | "PDF"
+  role             String   @default("PRIMARY_MEETING") // "PRIMARY_MEETING" | "SUPPORTING_DOCUMENT"
   fileName         String
   storageUrl       String
+  // Raw text pulled from DOCX/PDF supporting documents at upload time (no
+  // Deepgram, no diarization — just so it's ready to feed into report
+  // generation in Phase 5). Null for audio/video and for anything not
+  // extracted yet.
+  extractedText    String?
   uploadedAt       DateTime @default(now())
 
   transcript Transcript?

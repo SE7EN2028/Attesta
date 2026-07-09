@@ -13,6 +13,7 @@ type Row = {
   ownerEmail: string;
   createdAt: string;
   sourceFile: { fileName: string; type: string } | null;
+  supportingCount: number;
 };
 
 type RowState =
@@ -76,6 +77,13 @@ export function AdminSubmittedList({ initialRows }: { initialRows: Row[] }) {
                   {row.sourceFile
                     ? `${row.sourceFile.fileName} · ${row.sourceFile.type}`
                     : "No source file"}
+                  {row.supportingCount > 0 && (
+                    <span className="text-rust-400">
+                      {" "}
+                      · + {row.supportingCount} supporting doc
+                      {row.supportingCount === 1 ? "" : "s"}
+                    </span>
+                  )}
                 </p>
               </div>
 
