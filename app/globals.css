@@ -67,10 +67,61 @@
     background-color: var(--color-ink-900);
     color: var(--color-cream-200);
   }
+  ::selection {
+    background: var(--color-rust-600);
+    color: #fdfcf8;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-rust-600);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+}
+
+/* Entrance + attention motion, ported from the design bundle. */
+@keyframes attFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes attPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+  .animate-fade-up {
+    animation: attFadeUp 0.7s ease both;
+  }
+  .animate-fade-up-delayed {
+    animation: attFadeUp 0.7s ease 0.15s both;
+  }
+  .animate-att-pulse {
+    animation: attPulse 1s infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

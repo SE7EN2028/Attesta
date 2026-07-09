@@ -8,7 +8,7 @@ export function Hero() {
   return (
     <section className="py-20 md:py-28">
       <Container className="grid items-center gap-16 lg:grid-cols-2">
-        <div>
+        <div className="animate-fade-up">
           <Eyebrow>Meeting minutes, attested</Eyebrow>
           <h1 className="mt-5 font-serif text-5xl leading-[1.08] tracking-[-0.02em] text-cream-100 md:text-[66px] md:leading-[1.08]">
             From recording
@@ -44,7 +44,9 @@ export function Hero() {
           </div>
         </div>
 
-        <HeroMockup />
+        <div className="animate-fade-up-delayed min-w-0">
+          <HeroMockup />
+        </div>
       </Container>
     </section>
   );

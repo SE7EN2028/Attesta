@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/container";
+import { ScrollProgress } from "@/components/scroll-progress";
 
 const links = [
   { href: "#how-it-works", label: "How it works" },
@@ -35,6 +36,7 @@ export function Nav() {
           <Link href="/create">Try the preview</Link>
         </Button>
       </Container>
+      <ScrollProgress />
     </header>
   );
 }
