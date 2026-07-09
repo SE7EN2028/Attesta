@@ -197,9 +197,25 @@ const RESPONSE_SHAPE = `{
   "complianceFindings": [ { "category": "RISK"|"MISSING_DOCUMENT"|"COMPLIANCE_REFERENCE"|"RECOMMENDATION"|"COMPLIANT", "riskLevel": "CRITICAL"|"HIGH"|"MEDIUM"|"ADVISORY"|"COMPLIANT", "description": string, "ruleReference": string|null, "impactDescription": string|null, "confidence": number } ]
 }`;
 
+// France is the only region with a verified statutory rule set, so it gets a
+// jurisdiction-specific audit (real article citations allowed). Germany,
+// Belgium and the Netherlands are fully supported for transcription and report
+// generation, but Attesta has NOT verified their labour-code rule sets — so
+// their findings are kept general/procedural and are forbidden from citing any
+// statute. This keeps the audit honest rather than fabricating foreign law.
+const VERIFIED_RULESET_REGIONS = new Set(["France"]);
+
 function complianceInstructions(region: string, governingBody: string): string {
-  return `COMPLIANCE FINDINGS: audit the transcript itself (not the report you just wrote) against standard procedure for a ${governingBody} meeting under ${region} rules. Check specifically for, where the transcript gives evidence either way: quorum (was a headcount or present/total stated, and does it meet a typical statutory threshold?), notice/convocation period before the meeting, whether votes were called with a recorded headcount vs. just "no objection", approval of prior minutes, and standard clauses/documents a meeting of this type usually references (e.g. BDESE, attendance sheet, written employer answers to prior questions) that are notably absent or notably present.
-Each finding must cite what in the transcript supports it (fold that into description/impactDescription) — do not invent findings the transcript gives no evidence for. If the transcript is silent on something (e.g. convocation timing), either omit it or file it as MISSING_DOCUMENT/ADVISORY with lower confidence, not as a confident RISK. ruleReference is a real statute/article if you're confident of the exact citation for the stated region, otherwise null — never invent a citation. confidence (0-100) reflects your certainty given what the transcript actually shows. Include both problems (RISK/MISSING_DOCUMENT/RECOMMENDATION) and things done correctly (COMPLIANT) if evidenced. Empty array if the transcript gives no basis for any finding.`;
+  const core = `COMPLIANCE FINDINGS: audit the transcript itself (not the report you just wrote) against standard works-council procedure for a ${governingBody} meeting. Check, where the transcript gives evidence either way: quorum (was a headcount or present/total stated, and does it meet a typical threshold?), notice/convocation period before the meeting, whether votes were called with a recorded headcount vs. just "no objection", approval of prior minutes, and standard documents a meeting of this type usually references (attendance sheet, written employer answers to prior questions) that are notably absent or notably present.
+Each finding must cite what in the transcript supports it (fold that into description/impactDescription) — do not invent findings the transcript gives no evidence for. If the transcript is silent on something (e.g. convocation timing), either omit it or file it as MISSING_DOCUMENT/ADVISORY with lower confidence, not as a confident RISK. confidence (0-100) reflects your certainty given what the transcript actually shows. Include both problems (RISK/MISSING_DOCUMENT/RECOMMENDATION) and things done correctly (COMPLIANT) if evidenced. Empty array if the transcript gives no basis for any finding.`;
+
+  if (VERIFIED_RULESET_REGIONS.has(region)) {
+    return `${core}
+This meeting is under the verified ${region} rule set. You may also check France-specific items where evidenced (e.g. BDESE consultation, statutory notice periods). ruleReference is a real statute/article (e.g. French Labour Code) ONLY if you are confident of the exact citation for ${region}, otherwise null — never invent a citation.`;
+  }
+
+  return `${core}
+IMPORTANT — ${region} is supported but Attesta has NOT verified a ${region} statutory rule set. Keep every finding GENERAL and procedural: observations that hold for any works-council meeting, framed as general good practice, NOT as a jurisdiction-specific legal audit. Do NOT cite, name, or paraphrase any ${region} statute, article, or labour-code provision. ruleReference MUST be null for every finding. Do not imply these findings are checked against ${region} law.`;
 }
 
 // NOTE: supporting-document text is deliberately not a param here — see

@@ -53,9 +53,9 @@ type Action =
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_SUBMITTING"; submitting: boolean }
   | {
-      type: "SIGNED_UP";
-      user: { id: string; email: string; companyName: string };
-    }
+    type: "SIGNED_UP";
+    user: { id: string; email: string; companyName: string };
+  }
   | { type: "DRAFT_CREATED"; meetingRequestId: string }
   | { type: "FILE_UPLOADED"; fileName: string; fileType: string }
   | { type: "SUPPORTING_FILE_UPLOADED"; fileName: string; fileType: string }
@@ -121,17 +121,44 @@ function reducer(state: FlowState, action: Action): FlowState {
 
 const REGIONS = [
   { value: "France", live: true },
-  { value: "Germany", live: false },
-  { value: "Belgium", live: false },
-  { value: "Netherlands", live: false },
+  { value: "Germany", live: true },
+  { value: "Belgium", live: true },
+  { value: "Netherlands", live: true },
 ];
 
-const GOVERNING_BODIES = [
-  { value: "CSE", label: "CSE — works council" },
-  { value: "CSSCT", label: "CSSCT — health & safety" },
-  { value: "HR", label: "HR — internal meeting" },
-  { value: "AG", label: "AG — general assembly" },
-];
+// Governing bodies are region-specific — each region's real statutory
+// works-council structures. All four regions are fully selectable and run
+// the same transcription + report pipeline; compliance-audit depth still
+// differs (only France has a verified rule set — see lib/report-generation.ts).
+const GOVERNING_BODIES_BY_REGION: Record<
+  string,
+  { value: string; label: string }[]
+> = {
+  France: [
+    { value: "CSE", label: "CSE — works council" },
+    { value: "CSSCT", label: "CSSCT — health & safety" },
+    { value: "HR", label: "HR — internal meeting" },
+    { value: "AG", label: "AG — general assembly" },
+  ],
+  Germany: [{ value: "Betriebsrat", label: "Betriebsrat — works council" }],
+  Belgium: [
+    {
+      value: "CE/OR",
+      label: "Conseil d'Entreprise / Ondernemingsraad — works council",
+    },
+    { value: "CPPT/CPBW", label: "CPPT / CPBW — health & safety" },
+  ],
+  Netherlands: [
+    {
+      value: "Ondernemingsraad",
+      label: "Ondernemingsraad — works council (OR)",
+    },
+    {
+      value: "PVT",
+      label: "Personeelsvertegenwoordiging — staff representation (PVT)",
+    },
+  ],
+};
 
 const OUTPUT_LANGUAGES = [
   "English",
@@ -323,7 +350,7 @@ export function CreateFlow({
 
   const step2Valid =
     state.company.trim() &&
-    state.region === "France" &&
+    REGIONS.some((r) => r.live && r.value === state.region) &&
     state.governingBody &&
     state.meetingDate &&
     state.title.trim() &&
@@ -388,7 +415,7 @@ export function CreateFlow({
                   value: v,
                 })
               }
-              placeholder="Nordane SA"
+              placeholder="Style IT"
             />
 
             {state.error && <ErrorText>{state.error}</ErrorText>}
@@ -441,13 +468,21 @@ export function CreateFlow({
                       key={r.value}
                       type="button"
                       disabled={!r.live}
-                      onClick={() =>
+                      onClick={() => {
+                        // Switching region resets the governing body to that
+                        // region's first option — bodies differ per region.
                         dispatch({
                           type: "SET_FIELD",
                           field: "region",
                           value: r.value,
-                        })
-                      }
+                        });
+                        dispatch({
+                          type: "SET_FIELD",
+                          field: "governingBody",
+                          value:
+                            GOVERNING_BODIES_BY_REGION[r.value]?.[0]?.value ?? "",
+                        });
+                      }}
                       className={cn(
                         "rounded-full border px-3 py-1 font-mono text-[11px] transition-colors",
                         selected
@@ -470,7 +505,12 @@ export function CreateFlow({
                 Governing body
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {GOVERNING_BODIES.map((g) => {
+                {(GOVERNING_BODIES_BY_REGION[state.region] ?? []).length === 0 && (
+                  <span className="font-mono text-[11px] text-cream-500">
+                    Select a region first
+                  </span>
+                )}
+                {(GOVERNING_BODIES_BY_REGION[state.region] ?? []).map((g) => {
                   const selected = state.governingBody === g.value;
                   return (
                     <button
@@ -813,10 +853,10 @@ function SummaryCard({ state }: { state: FlowState }) {
             "Date",
             state.meetingDate
               ? new Date(state.meetingDate).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })
               : "—",
           ],
         ].map(([k, v]) => (

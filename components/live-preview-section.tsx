@@ -35,7 +35,7 @@ const labelCls = "mb-[5px] block text-[12.5px] font-semibold text-slate-700";
 
 export function LivePreviewSection() {
   const [form, setForm] = useState<LiveForm>({
-    company: "Nordane SA",
+    company: "Style IT",
     region: "France",
     body: "CSE",
     date: "2026-09-17",

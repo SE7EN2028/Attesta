@@ -68,11 +68,11 @@ export const cover = (o: CoverOpts) =>
       ${o.subtitle ? `<div style="font-size:8.2px;color:${MUT};margin-top:6px">${o.subtitle}</div>` : ""}
       <div style="margin-top:auto">
         ${(o.rows || [])
-          .map(
-            (r) =>
-              `<div style="display:flex;justify-content:space-between;gap:6px;border-top:1px solid ${RULE};padding:3.5px 0;font-size:7.4px"><span style="font-family:${F_MONO};letter-spacing:.08em;text-transform:uppercase;color:${MUT}">${r[0]}</span><span style="font-weight:600;text-align:right">${r[1]}</span></div>`
-          )
-          .join("")}
+      .map(
+        (r) =>
+          `<div style="display:flex;justify-content:space-between;gap:6px;border-top:1px solid ${RULE};padding:3.5px 0;font-size:7.4px"><span style="font-family:${F_MONO};letter-spacing:.08em;text-transform:uppercase;color:${MUT}">${r[0]}</span><span style="font-weight:600;text-align:right">${r[1]}</span></div>`
+      )
+      .join("")}
       </div>
       ${o.stamp ? `<div style="position:absolute;top:5%;right:5%">${stamp(o.stamp, o.stampColor)}</div>` : ""}
       <div style="position:absolute;bottom:3.5%;left:8%;display:flex;align-items:center;gap:4px;font-family:${F_SERIF};font-size:8.5px;color:${INK}">Attesta<span style="width:3px;height:3px;border-radius:50%;background:${RED};display:inline-block"></span></div>
@@ -89,7 +89,7 @@ export const FLIPBOOK_SAMPLES: Record<string, string[]> = {
       kicker: "Minutes · Ordinary session",
       title:
         "Social and Economic Committee (CSE) — session of 17 September 2026",
-      subtitle: "Nordane SA · Lyon site",
+      subtitle: "Style IT · Lyon site",
       rows: [
         ["Region", "France"],
         ["Governing body", "CSE"],
@@ -99,110 +99,110 @@ export const FLIPBOOK_SAMPLES: Record<string, string[]> = {
       stamp: "Signed · Locked",
     }),
     pg(
-      rh("Minutes · CSE Nordane SA", "17.09.2026") +
-        h("Attendance") +
-        p(
-          "9 of 11 titular members present — <b>quorum met</b>. Alternates: 2. Chair: A. Vasseur (management). Session secretary: C. Marchal."
-        ) +
-        sub("Agenda") +
-        [
-          "Approval of the minutes of 18 June",
-          "Economic situation — H1 2026",
-          "2027 training plan",
-          "Working-hours adjustment — Vénissieux site",
-          "Other business",
-        ]
-          .map(
-            (t, i) =>
-              `<div style="display:flex;gap:6px;font-size:8.2px;line-height:1.5;margin-bottom:4px;color:#3A4350"><span style="font-family:${F_MONO};color:${RED};flex:none">${i + 1}.</span><span>${t}</span></div>`
-          )
-          .join("")
+      rh("Minutes · CSE Style IT", "17.09.2026") +
+      h("Attendance") +
+      p(
+        "9 of 11 titular members present — <b>quorum met</b>. Alternates: 2. Chair: A. Vasseur (management). Session secretary: C. Marchal."
+      ) +
+      sub("Agenda") +
+      [
+        "Approval of the minutes of 18 June",
+        "Economic situation — H1 2026",
+        "2027 training plan",
+        "Working-hours adjustment — Vénissieux site",
+        "Other business",
+      ]
+        .map(
+          (t, i) =>
+            `<div style="display:flex;gap:6px;font-size:8.2px;line-height:1.5;margin-bottom:4px;color:#3A4350"><span style="font-family:${F_MONO};color:${RED};flex:none">${i + 1}.</span><span>${t}</span></div>`
+        )
+        .join("")
     ),
     pg(
       rh("Deliberations & votes", "p. 3") +
-        h("Item 3 — 2027 training plan") +
-        p(
-          "After presentation of the budget (€1.38M, +15% vs 2026) and discussion, the following opinion is recorded:"
-        ) +
-        `<div style="border:1px solid ${RULE};border-radius:3px;margin:8px 0;padding:7px 8px;background:${WASH}">
+      h("Item 3 — 2027 training plan") +
+      p(
+        "After presentation of the budget (€1.38M, +15% vs 2026) and discussion, the following opinion is recorded:"
+      ) +
+      `<div style="border:1px solid ${RULE};border-radius:3px;margin:8px 0;padding:7px 8px;background:${WASH}">
         <div style="display:flex;justify-content:space-between;font-size:7.6px;margin-bottom:4px"><span style="font-family:${F_MONO};letter-spacing:.1em;text-transform:uppercase;color:${MUT}">Show-of-hands vote</span>${chip("Favourable opinion", GRN)}</div>
         <div style="display:flex;gap:10px;font-size:8.2px"><span><b>8</b> for</span><span><b>1</b> against</span><span><b>2</b> abst.</span></div>
       </div>` +
-        h("Item 4 — Working-hours adjustment") +
-        p(
-          "The CSE requests the impact study before issuing any opinion. <b>Vote deferred</b> to the October session — entered in the decision log."
-        )
+      h("Item 4 — Working-hours adjustment") +
+      p(
+        "The CSE requests the impact study before issuing any opinion. <b>Vote deferred</b> to the October session — entered in the decision log."
+      )
     ),
     pg(
       rh("Signatures & audit", "p. 4") +
-        `<div style="display:flex;gap:12px;margin:10px 0 12px">${sig("C. Marchal", "Session secretary")}${sig("A. Vasseur", "Chair")}</div>` +
-        sub("Audit trail — extract") +
-        mono("16:40 TRANSCRIPT · diarization · 4 speakers") +
-        mono("17:22 REVIEW · m.leroy · 14 corrections") +
-        mono("18:03 LOCK · sha-256: 9f3a…c41d", "#4A5462") +
-        `<div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end">${stamp("Attesta · Cert. No. 2214")}<span style="font-family:${F_MONO};font-size:6.4px;color:${MUT}">PDF + DOCX · delivered 18:04</span></div>`
+      `<div style="display:flex;gap:12px;margin:10px 0 12px">${sig("C. Marchal", "Session secretary")}${sig("A. Vasseur", "Chair")}</div>` +
+      sub("Audit trail — extract") +
+      mono("16:40 TRANSCRIPT · diarization · 4 speakers") +
+      mono("17:22 REVIEW · m.leroy · 14 corrections") +
+      mono("18:03 LOCK · sha-256: 9f3a…c41d", "#4A5462") +
+      `<div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end">${stamp("Attesta · Cert. No. 2214")}<span style="font-family:${F_MONO};font-size:6.4px;color:${MUT}">PDF + DOCX · delivered 18:04</span></div>`
     ),
   ],
 
   transcript: [
     pg(
       rh("Verbatim · diarization", "48:12 audio") +
-        h("Full transcript — 4 speakers") +
-        `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px">${chip("S1 · A. Vasseur", RED)}${chip("S2 · M. Duval (CFDT)", BLU)}${chip("S3 · C. Marchal", GRN)}${chip("S4 · L. Petit", AMB)}</div>` +
-        tline(
-          "00:02:11",
-          "A. Vasseur",
-          RED,
-          "I call the session to order. Quorum is met — nine titular members present."
-        ) +
-        tline(
-          "00:02:39",
-          "C. Marchal",
-          GRN,
-          "The minutes of 18 June are submitted for approval…"
-        ) +
-        tline(
-          "00:04:02",
-          "M. Duval",
-          BLU,
-          "One remark on item 3 before we begin, about the training budget."
-        )
+      h("Full transcript — 4 speakers") +
+      `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px">${chip("S1 · A. Vasseur", RED)}${chip("S2 · M. Duval (CFDT)", BLU)}${chip("S3 · C. Marchal", GRN)}${chip("S4 · L. Petit", AMB)}</div>` +
+      tline(
+        "00:02:11",
+        "A. Vasseur",
+        RED,
+        "I call the session to order. Quorum is met — nine titular members present."
+      ) +
+      tline(
+        "00:02:39",
+        "C. Marchal",
+        GRN,
+        "The minutes of 18 June are submitted for approval…"
+      ) +
+      tline(
+        "00:04:02",
+        "M. Duval",
+        BLU,
+        "One remark on item 3 before we begin, about the training budget."
+      )
     ),
     pg(
       rh("Review — corrections", "p. 2") +
-        h("What a machine alone would have missed") +
-        tline(
-          "00:23:41",
-          "M. Duval",
-          BLU,
-          `…regarding <s style="color:${RED};text-decoration-color:${RED}">the thirteen-hour bonus</s> <b style="color:${GRN}">the thirteenth-month bonus</b>, the request stands.`
-        ) +
-        `<div style="border-left:2px solid ${RED};padding:4px 0 4px 8px;margin:4px 0 10px"><div style="font-family:${F_MONO};font-size:6.6px;color:${RED};letter-spacing:.08em">REVIEWER · M.LEROY</div>${p("Corrected against the audio — 00:23:41. Standard payroll term, not a speaker error.")}</div>` +
-        tline(
-          "00:31:07",
-          'Speaker 2 → <b style="color:' + GRN + '">M. Duval</b>',
-          BLU,
-          "attribution corrected after checking two similar voices (S2/S4)."
-        )
+      h("What a machine alone would have missed") +
+      tline(
+        "00:23:41",
+        "M. Duval",
+        BLU,
+        `…regarding <s style="color:${RED};text-decoration-color:${RED}">the thirteen-hour bonus</s> <b style="color:${GRN}">the thirteenth-month bonus</b>, the request stands.`
+      ) +
+      `<div style="border-left:2px solid ${RED};padding:4px 0 4px 8px;margin:4px 0 10px"><div style="font-family:${F_MONO};font-size:6.6px;color:${RED};letter-spacing:.08em">REVIEWER · M.LEROY</div>${p("Corrected against the audio — 00:23:41. Standard payroll term, not a speaker error.")}</div>` +
+      tline(
+        "00:31:07",
+        'Speaker 2 → <b style="color:' + GRN + '">M. Duval</b>',
+        BLU,
+        "attribution corrected after checking two similar voices (S2/S4)."
+      )
     ),
     pg(
       rh("Quality control", "p. 3") +
-        h("Review pass — mandatory before drafting") +
-        chk("ok", "All 4 speakers named and confirmed by the secretary") +
-        chk("ok", "14 corrections applied (terms, figures, attributions)") +
-        chk("ok", "Figures cross-checked against the attached documents") +
-        chk("warn", "One inaudible segment flagged (00:41:02 — 6 s)") +
-        rule +
-        p(
-          "Inaudible segments are listed in an annex, never silently guessed. That is what makes the document defensible."
-        )
+      h("Review pass — mandatory before drafting") +
+      chk("ok", "All 4 speakers named and confirmed by the secretary") +
+      chk("ok", "14 corrections applied (terms, figures, attributions)") +
+      chk("ok", "Figures cross-checked against the attached documents") +
+      chk("warn", "One inaudible segment flagged (00:41:02 — 6 s)") +
+      rule +
+      p(
+        "Inaudible segments are listed in an annex, never silently guessed. That is what makes the document defensible."
+      )
     ),
     pg(
       rh("Status", "p. 4") +
-        `<div style="margin:14% 0 10px">${stamp("Cleared for drafting", GRN)}</div>` +
-        p("The reviewed transcript now goes into the report drafting template.") +
-        sub("Template") +
-        mono("minutes_v12 · agenda-based structure · vote detection", "#4A5462")
+      `<div style="margin:14% 0 10px">${stamp("Cleared for drafting", GRN)}</div>` +
+      p("The reviewed transcript now goes into the report drafting template.") +
+      sub("Template") +
+      mono("minutes_v12 · agenda-based structure · vote detection", "#4A5462")
     ),
   ],
 
@@ -222,60 +222,60 @@ export const FLIPBOOK_SAMPLES: Record<string, string[]> = {
     }),
     pg(
       rh("Structure — agenda", "p. 2") +
-        h("Item 2 — Logistics reorganisation project") +
-        p(
-          "Management presents the plan to merge the two warehouses. Elected members raise three reservations: the timeline, team transfers, and load on the remaining site.",
-          "margin-bottom:8px"
-        ) +
-        sub("Speaking time on this item") +
-        bar("R. Lambert (CGT)", 38, RED, "11 min") +
-        bar("Management", 31, BLU, "9 min") +
-        bar("S. Nguyen (CFDT)", 21, GRN, "6 min") +
-        bar("Other members", 10, AMB, "3 min")
+      h("Item 2 — Logistics reorganisation project") +
+      p(
+        "Management presents the plan to merge the two warehouses. Elected members raise three reservations: the timeline, team transfers, and load on the remaining site.",
+        "margin-bottom:8px"
+      ) +
+      sub("Speaking time on this item") +
+      bar("R. Lambert (CGT)", 38, RED, "11 min") +
+      bar("Management", 31, BLU, "9 min") +
+      bar("S. Nguyen (CFDT)", 21, GRN, "6 min") +
+      bar("Other members", 10, AMB, "3 min")
     ),
     pg(
       rh("Votes & decisions", "p. 3") +
-        h("Decisions detected automatically") +
-        `<div style="border:1px solid ${RULE};border-radius:3px;padding:7px 8px;margin-bottom:7px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:8px;font-weight:600">Appointment of a chartered accountant (Art. L2315-88)</span>${chip("Adopted", GRN)}</div><div style="font-family:${F_MONO};font-size:6.8px;color:${MUT}">10 for · 0 against · 1 abst. · show of hands · 15:12</div></div>` +
-        `<div style="border:1px solid ${RULE};border-radius:3px;padding:7px 8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:8px;font-weight:600">Opinion on the reorganisation project</span>${chip("Deferred", AMB)}</div><div style="font-family:${F_MONO};font-size:6.8px;color:${MUT}">pending the expert report · 15:41</div></div>` +
-        rule +
-        p(
-          "Every vote is time-stamped and linked to the exact passage of the transcript."
-        )
+      h("Decisions detected automatically") +
+      `<div style="border:1px solid ${RULE};border-radius:3px;padding:7px 8px;margin-bottom:7px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:8px;font-weight:600">Appointment of a chartered accountant (Art. L2315-88)</span>${chip("Adopted", GRN)}</div><div style="font-family:${F_MONO};font-size:6.8px;color:${MUT}">10 for · 0 against · 1 abst. · show of hands · 15:12</div></div>` +
+      `<div style="border:1px solid ${RULE};border-radius:3px;padding:7px 8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:8px;font-weight:600">Opinion on the reorganisation project</span>${chip("Deferred", AMB)}</div><div style="font-family:${F_MONO};font-size:6.8px;color:${MUT}">pending the expert report · 15:41</div></div>` +
+      rule +
+      p(
+        "Every vote is time-stamped and linked to the exact passage of the transcript."
+      )
     ),
     pg(
       rh("Compliance audit", "p. 4") +
-        h("Checked against the France · CSE rule set") +
-        bar("Compliance score", 91, GRN, "91 / 100") +
-        chk("ok", "Convocation within the statutory notice period") +
-        chk("ok", "Quorum recorded on the record") +
-        chk("ok", "Consultation deadline observed") +
-        chk("warn", "Attach the impact study cited in session") +
-        p(
-          "The full, finding-by-finding audit ships as the compliance dashboard. Rule references here are illustrative sample content.",
-          "margin-top:6px"
-        )
+      h("Checked against the France · CSE rule set") +
+      bar("Compliance score", 91, GRN, "91 / 100") +
+      chk("ok", "Convocation within the statutory notice period") +
+      chk("ok", "Quorum recorded on the record") +
+      chk("ok", "Consultation deadline observed") +
+      chk("warn", "Attach the impact study cited in session") +
+      p(
+        "The full, finding-by-finding audit ships as the compliance dashboard. Rule references here are illustrative sample content.",
+        "margin-top:6px"
+      )
     ),
     pg(
       rh("Signature", "p. 5") +
-        h("Digital sign-off block") +
-        p(
-          "The minutes are locked after review; any later change requires a logged unlock.",
-          "margin-bottom:10px"
-        ) +
-        `<div style="display:flex;gap:12px;margin-bottom:12px">${sig("S. Nguyen", "CSE secretary")}${sig("P. Roussel", "Chair")}</div>` +
-        sub("Document fingerprint") +
-        mono("sha-256: 4be1…88f0 · locked 02.10 at 17:26", "#4A5462") +
-        `<div style="margin-top:auto">${stamp("Signed · Locked")}</div>`
+      h("Digital sign-off block") +
+      p(
+        "The minutes are locked after review; any later change requires a logged unlock.",
+        "margin-bottom:10px"
+      ) +
+      `<div style="display:flex;gap:12px;margin-bottom:12px">${sig("S. Nguyen", "CSE secretary")}${sig("P. Roussel", "Chair")}</div>` +
+      sub("Document fingerprint") +
+      mono("sha-256: 4be1…88f0 · locked 02.10 at 17:26", "#4A5462") +
+      `<div style="margin-top:auto">${stamp("Signed · Locked")}</div>`
     ),
     pg(
       rh("Delivery", "p. 6") +
-        h("What the client receives") +
-        chk("ok", "Complete minutes — PDF and editable DOCX") +
-        chk("ok", "The compliance dashboard") +
-        chk("ok", "Votes & decisions log") +
-        chk("ok", "On-screen e-book reading, with the multilingual assistant") +
-        `<div style="margin-top:auto">${stamp("Delivered in 1–2 hours", GRN)}</div>`
+      h("What the client receives") +
+      chk("ok", "Complete minutes — PDF and editable DOCX") +
+      chk("ok", "The compliance dashboard") +
+      chk("ok", "Votes & decisions log") +
+      chk("ok", "On-screen e-book reading, with the multilingual assistant") +
+      `<div style="margin-top:auto">${stamp("Delivered in 1–2 hours", GRN)}</div>`
     ),
   ],
 };
@@ -325,64 +325,64 @@ export function buildLiveSample(f: LiveForm): string[] {
     }),
     pg(
       rh("How to read this preview", "p. 2") +
-        h("Three fixed analyses, straight from your file") +
-        p(
-          "No full transcription has run yet. A lightweight engine produced exactly three views so you can judge relevance before requesting anything.",
-          "margin-bottom:8px"
-        ) +
-        chk("ok", "Speaker analysis — who spoke, how much") +
-        chk("ok", "Figures mentioned, drawn as charts") +
-        chk("ok", "A basic compliance safety check") +
-        rule +
-        p(
-          "<b>Read-only.</b> Editing, sign-off and download exist only in the delivered report."
-        )
+      h("Three fixed analyses, straight from your file") +
+      p(
+        "No full transcription has run yet. A lightweight engine produced exactly three views so you can judge relevance before requesting anything.",
+        "margin-bottom:8px"
+      ) +
+      chk("ok", "Speaker analysis — who spoke, how much") +
+      chk("ok", "Figures mentioned, drawn as charts") +
+      chk("ok", "A basic compliance safety check") +
+      rule +
+      p(
+        "<b>Read-only.</b> Editing, sign-off and download exist only in the delivered report."
+      )
     ),
     pg(
       rh("1 / Speaker analysis", "48:12") +
-        h("Who spoke, and how much") +
-        bar("Voice A — chairs the meeting", 36, RED, "17 min") +
-        bar("Voice B", 27, BLU, "13 min") +
-        bar("Voice C", 22, GRN, "11 min") +
-        bar("Voice D", 15, AMB, "7 min") +
-        p(
-          "4 distinct voices detected. Names are confirmed during human review — never guessed.",
-          "margin-top:6px"
-        )
+      h("Who spoke, and how much") +
+      bar("Voice A — chairs the meeting", 36, RED, "17 min") +
+      bar("Voice B", 27, BLU, "13 min") +
+      bar("Voice C", 22, GRN, "11 min") +
+      bar("Voice D", 15, AMB, "7 min") +
+      p(
+        "4 distinct voices detected. Names are confirmed during human review — never guessed.",
+        "margin-top:6px"
+      )
     ),
     pg(
       rh("2 / Figures mentioned", "6 series") +
-        h("Numbers, drawn instead of buried") +
-        sub("Training budget (discussed)") +
-        bar("2026", 87, BLU, "1.20 M€") +
-        bar("2027 — proposed", 100, GRN, "1.38 M€") +
-        sub("Absenteeism rate") +
-        bar("H1 2026", 68, AMB, "4.1 %") +
-        bar("Target", 60, GRN, "3.6 %")
+      h("Numbers, drawn instead of buried") +
+      sub("Training budget (discussed)") +
+      bar("2026", 87, BLU, "1.20 M€") +
+      bar("2027 — proposed", 100, GRN, "1.38 M€") +
+      sub("Absenteeism rate") +
+      bar("H1 2026", 68, AMB, "4.1 %") +
+      bar("Target", 60, GRN, "3.6 %")
     ),
     pg(
       rh("3 / Compliance safety check", f.region + " · " + f.body) +
-        h("Early flags — not the full audit") +
-        chk("ok", "Quorum stated on the record") +
-        chk("ok", "Agenda announced and followed") +
-        chk("warn", "A vote is mentioned without a headcount") +
-        chk("no", "No reference to the consultation deadline") +
-        rule +
-        p(
-          "2 flags to watch. The full, finding-by-finding audit ships with your delivered report."
-        )
+      h("Early flags — not the full audit") +
+      chk("ok", "Quorum stated on the record") +
+      chk("ok", "Agenda announced and followed") +
+      chk("warn", "A vote is mentioned without a headcount") +
+      chk("no", "No reference to the consultation deadline") +
+      rule +
+      p(
+        "2 flags to watch. The full, finding-by-finding audit ships with your delivered report."
+      )
     ),
     pg(
       rh("Next step", "p. 6") +
-        '<div style="margin:10% 0 10px">' +
-        stamp("Read-only · Not for the record", RED) +
-        "</div>" +
-        h("This preview cannot be edited or downloaded") +
-        p(
-          "That is deliberate: nothing unreviewed should ever look like a deliverable. Send the request — a specialist takes it from there.",
-          "margin-bottom:8px"
-        ) +
-        p("<b>Delivered in 1–2 hours,</b> human-checked and locked.")
+      '<div style="margin:10% 0 10px">' +
+      stamp("Read-only · Not for the record", RED) +
+      "</div>" +
+      h("This preview cannot be edited or downloaded") +
+      p(
+        "That is deliberate: nothing unreviewed should ever look like a deliverable. Send the request — a specialist takes it from there.",
+        "margin-bottom:8px"
+      ) +
+      p("<b>Delivered in 1–2 hours,</b> human-checked and locked.")
     ),
   ];
 }

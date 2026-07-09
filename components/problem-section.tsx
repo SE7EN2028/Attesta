@@ -193,7 +193,7 @@ export function ProblemSection() {
                 Social and Economic Committee (CSE) — ordinary session
               </div>
               <div className="text-[clamp(10px,1.2vw,13px)] text-[#6A7280]">
-                Nordane SA · 9 of 11 titular members · quorum met
+                Style IT · 9 of 11 titular members · quorum met
               </div>
               <div className="mt-3 text-[clamp(10px,1.25vw,13.5px)] leading-[1.75] text-slate-700">
                 <div className="flex gap-2">

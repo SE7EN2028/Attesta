@@ -226,8 +226,9 @@ export function ComplianceDashboard({
         </div>
 
         <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.06em] text-cream-500">
-          {meetingTitle} — generated findings; rule citations are AI-drafted,
-          not legal advice.
+          {region === "France"
+            ? `${meetingTitle} — generated findings; rule citations are AI-drafted, not legal advice.`
+            : `${meetingTitle} — general procedural observations only. Attesta does not yet maintain a verified ${region} rule set, so no ${region} statutes are cited. Not legal advice.`}
         </p>
       </div>
     </div>

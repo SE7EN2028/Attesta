@@ -195,7 +195,7 @@ async function main() {
   await prisma.meetingRequest.create({
     data: {
       userId: user.id,
-      company: "Nordane SA",
+      company: "Style IT",
       region: "France",
       governingBody: "CSE",
       meetingDate: new Date("2026-09-17"),
@@ -265,7 +265,7 @@ async function main() {
           outputLanguage: "English",
           content: {
             coverInfo: {
-              companyName: "Nordane SA",
+              companyName: "Style IT",
               site: "Lyon site",
               region: "France",
               governingBody: "CSE",
