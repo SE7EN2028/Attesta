@@ -296,10 +296,19 @@ const SYSTEM_PROMPT =
 // — occasional, single-request, admin-triggered report generation. Its low
 // RPM/RPD free-tier caps are request-count limits, not the token-volume
 // limit that was the actual blocker, so they don't bind here.
-// Overridable via GEMINI_MODEL env. Default is gemini-2.5-flash — the
-// previous default (gemini-3.5-flash) was persistently returning 503
-// "high demand", so it's no longer the target.
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+// Model fallback chain (first = primary). On quota exhaustion (or a model that
+// stays unavailable after its retries) generation advances to the next model.
+// Override with GEMINI_MODELS (comma-separated) or a single GEMINI_MODEL.
+function resolveModels(): string[] {
+  const csv = process.env.GEMINI_MODELS;
+  if (csv) {
+    const list = csv.split(",").map((s) => s.trim()).filter(Boolean);
+    if (list.length) return list;
+  }
+  if (process.env.GEMINI_MODEL) return [process.env.GEMINI_MODEL];
+  return ["gemini-3.5-flash", "gemini-2.5-flash"];
+}
+const GEMINI_MODELS = resolveModels();
 
 function resolveGeminiApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -314,12 +323,55 @@ function resolveGeminiApiKey(): string {
 const TRANSIENT_RETRY_ATTEMPTS = 3;
 const TRANSIENT_RETRY_DELAY_MS = 15_000;
 
-function isTransientProviderError(message: string): boolean {
-  return /429|503|RESOURCE_EXHAUSTED|UNAVAILABLE|Service Unavailable|timed out|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(
+// Quota exhaustion won't recover on retry — bail to the next model immediately.
+function isExhaustionError(message: string): boolean {
+  return /429|RESOURCE_EXHAUSTED|quota/i.test(message);
+}
+// Overload / network / timeout — worth retrying the same model before moving on.
+function isRetriableTransient(message: string): boolean {
+  return /503|UNAVAILABLE|Service Unavailable|timed out|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(
     message
   );
 }
+// Either kind means "this model isn't giving us an answer" → try the next one.
+function isModelAvailabilityError(message: string): boolean {
+  return isExhaustionError(message) || isRetriableTransient(message);
+}
 
+// One model: retry on transient overload/network errors, but NOT on quota
+// exhaustion (that just wastes time before the caller falls to the next model).
+async function attemptModel(
+  apiKey: string,
+  prompt: string,
+  timeoutMs: number,
+  model: string,
+  maxAttempts: number
+): Promise<Omit<GeneratedReport, "generatedBy">> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await callProviderWithRetry(apiKey, prompt, timeoutMs, model);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      // Exhausted, or a non-availability error (bad JSON, blocked prompt) —
+      // no point retrying this model; let the caller decide (switch / surface).
+      if (isExhaustionError(message) || !isRetriableTransient(message)) {
+        throw error;
+      }
+      if (attempt === maxAttempts) throw error;
+      console.error(
+        `[report-generation] ${model} attempt ${attempt}/${maxAttempts} transient error (${message.slice(0, 140)}) — retrying in ${TRANSIENT_RETRY_DELAY_MS / 1000}s.`
+      );
+      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
+    }
+  }
+  throw lastError;
+}
+
+// Walk the model chain: primary first, fall to the next model on quota
+// exhaustion or persistent unavailability. Non-availability errors (invalid
+// JSON, blocked prompt) surface immediately.
 async function callModelForJson(
   prompt: string,
   budget?: ReportGenerationBudget
@@ -329,21 +381,22 @@ async function callModelForJson(
   const timeoutMs = budget?.timeoutMs ?? PROVIDER_TIMEOUT_MS;
 
   let lastError: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const model = GEMINI_MODELS[i];
+    const isLastModel = i === GEMINI_MODELS.length - 1;
     try {
-      const result = await callProviderWithRetry(apiKey, prompt, timeoutMs);
+      const result = await attemptModel(apiKey, prompt, timeoutMs, model, maxAttempts);
       return { ...result, generatedBy: "gemini" };
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
-      const isLastAttempt = attempt === maxAttempts;
-      if (!isTransientProviderError(message) || isLastAttempt) {
-        throw error;
+      if (!isLastModel && isModelAvailabilityError(message)) {
+        console.error(
+          `[report-generation] model ${model} unavailable (${message.slice(0, 140)}) — falling back to ${GEMINI_MODELS[i + 1]}.`
+        );
+        continue;
       }
-      console.error(
-        `[report-generation] gemini attempt ${attempt}/${maxAttempts} hit a transient error (${message}) — retrying in ${TRANSIENT_RETRY_DELAY_MS / 1000}s.`
-      );
-      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
+      throw error;
     }
   }
   throw lastError;
@@ -354,14 +407,15 @@ async function callModelForJson(
 async function callProviderWithRetry(
   apiKey: string,
   prompt: string,
-  timeoutMs: number
+  timeoutMs: number,
+  model: string
 ): Promise<Omit<GeneratedReport, "generatedBy">> {
-  const first = await callChatCompletion(apiKey, prompt, timeoutMs);
+  const first = await callChatCompletion(apiKey, prompt, timeoutMs, model);
   const parsed = tryParseJson(first);
   if (parsed) return validateShape(parsed);
 
   const strictPrompt = `${prompt}\n\nIMPORTANT: Your previous response was not valid JSON. Return ONLY a single valid JSON object — no markdown code fences (no \`\`\`), no commentary, no explanation. The response must start with { and end with }.`;
-  const second = await callChatCompletion(apiKey, strictPrompt, timeoutMs);
+  const second = await callChatCompletion(apiKey, strictPrompt, timeoutMs, model);
   const parsedSecond = tryParseJson(second);
   if (parsedSecond) return validateShape(parsedSecond);
 
@@ -379,7 +433,8 @@ const PROVIDER_TIMEOUT_MS = 400_000;
 async function callChatCompletion(
   apiKey: string,
   prompt: string,
-  timeoutMs: number
+  timeoutMs: number,
+  model: string
 ): Promise<string> {
   // Next.js patches the global fetch for its data cache, and in practice
   // that patched fetch does not reliably honor an AbortSignal here — a
@@ -393,7 +448,7 @@ async function callChatCompletion(
     );
   });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   let res: Response;
   try {
