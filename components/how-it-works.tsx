@@ -30,31 +30,31 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="border-t border-cream-200/10 py-24 md:py-32">
+    <section id="how-it-works" className="border-t border-slate-900/10 bg-paper-500 py-24 md:py-32">
       <Container>
-        <Eyebrow>How it works</Eyebrow>
-        <h2 className="mt-5 max-w-2xl font-serif text-3xl leading-[1.15] text-cream-100 md:text-[44px]">
+        <Eyebrow className="text-rust-600">How it works</Eyebrow>
+        <h2 className="mt-5 max-w-2xl font-serif text-3xl leading-[1.15] text-slate-900 md:text-[44px]">
           Four steps. You do the first three in minutes.
         </h2>
 
         <div className="mt-16 grid gap-x-8 gap-y-14 md:grid-cols-2 lg:grid-cols-4">
           {steps.map((step) => (
             <div key={step.n}>
-              <p className="font-serif text-3xl text-rust-400">{step.n}.</p>
-              <h3 className="mt-4 text-lg font-semibold text-cream-100">
+              <p className="font-serif text-3xl text-rust-600">{step.n}.</p>
+              <h3 className="mt-4 text-lg font-semibold text-slate-900">
                 {step.title}
               </h3>
-              <p className="mt-3 text-[14.5px] leading-relaxed text-cream-300">
+              <p className="mt-3 text-[14.5px] leading-relaxed text-slate-700">
                 {step.body}
               </p>
-              <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.08em] text-cream-500">
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.08em] text-slate-500">
                 {step.meta}
               </p>
             </div>
           ))}
         </div>
 
-        <p className="mt-16 font-mono text-[13px] text-cream-400">
+        <p className="mt-16 font-mono text-[13px] text-slate-600">
           Try steps 2 and 3 live, right now ↓
         </p>
       </Container>

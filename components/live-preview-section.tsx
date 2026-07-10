@@ -90,14 +90,14 @@ export function LivePreviewSection() {
   return (
     <section
       id="live-preview"
-      className="border-t border-cream-200/10 py-24 md:py-32"
+      className="border-t border-slate-900/10 bg-paper-500 py-24 md:py-32"
     >
       <Container>
-        <Eyebrow>The live preview · working demo</Eyebrow>
-        <h2 className="mt-5 max-w-2xl font-serif text-3xl leading-[1.15] text-cream-100 md:text-[44px]">
+        <Eyebrow className="text-rust-600">The live preview · working demo</Eyebrow>
+        <h2 className="mt-5 max-w-2xl font-serif text-3xl leading-[1.15] text-slate-900 md:text-[44px]">
           See your report take shape before you commit to anything.
         </h2>
-        <p className="mt-6 max-w-2xl text-[17px] leading-[1.65] text-cream-300">
+        <p className="mt-6 max-w-2xl text-[17px] leading-[1.65] text-slate-700">
           This is the actual intake flow, with sample data. Edit the form —
           the cover updates as you type. Then run the sample recording
           through the preview engine. The preview is instant. The full
@@ -323,7 +323,7 @@ export function LivePreviewSection() {
                   READ-ONLY · NOT DOWNLOADABLE
                 </div>
                 <FlipBook pages={livePages} chrome="light" />
-                <p className="mt-5 text-[14px] leading-[1.65] text-cream-300">
+                <p className="mt-5 text-[14px] leading-[1.65] text-slate-700">
                   This preview can&apos;t be edited or exported —
                   deliberately. Nothing unreviewed should ever look like a
                   deliverable. The only way to unlock the editable, signed
