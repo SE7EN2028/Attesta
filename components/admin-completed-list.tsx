@@ -87,13 +87,18 @@ export function AdminCompletedList({ initialRows }: { initialRows: Row[] }) {
                     Locked ✓
                   </span>
                 ) : (
-                  <Button
-                    size="sm"
-                    disabled={lock.status === "running"}
-                    onClick={() => handleLock(row.meetingRequestId)}
-                  >
-                    {lock.status === "running" ? "Locking…" : "Lock report"}
-                  </Button>
+                  <>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/admin/edit/${row.reportId}`}>Edit</Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={lock.status === "running"}
+                      onClick={() => handleLock(row.meetingRequestId)}
+                    >
+                      {lock.status === "running" ? "Locking…" : "Lock report"}
+                    </Button>
+                  </>
                 )}
               </div>
             </div>

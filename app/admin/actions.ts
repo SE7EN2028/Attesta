@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { transcribeSourceFile } from "@/lib/transcription";
 import {
   generateReportContent,
+  isRenderableReportContent,
   type GeneratedReport,
+  type ReportContent,
   type ReportGenerationBudget,
 } from "@/lib/report-generation";
 
@@ -226,4 +228,74 @@ export async function lockReport(
       lockedBy: locked.lockedBy ?? LOCKED_BY,
     },
   };
+}
+
+// Saves reviewer edits to a DRAFT report's content — the "edit before lock"
+// step. Content-only: unlike runReportGeneration (which re-runs the model and
+// deletes+recreates compliance findings), this touches Report.content ONLY and
+// never re-transcribes, re-generates, or disturbs findings / speakerAnalytics /
+// numericalData / status. Rejected once locked — a locked report is frozen.
+// (A later re-generate still overwrites these manual edits; no versioning yet.)
+export async function saveReportContent(
+  reportId: string,
+  content: ReportContent
+): Promise<ActionResult<{ id: string }>> {
+  const report = await prisma.report.findUnique({ where: { id: reportId } });
+  if (!report) {
+    return { ok: false, error: "Report not found." };
+  }
+  if (report.status === "LOCKED") {
+    return { ok: false, error: "Locked reports can't be edited." };
+  }
+  // Guard the incoming shape with the same predicate the renderer trusts, so a
+  // malformed payload can't be persisted and later break /report or /samples.
+  if (!isRenderableReportContent(content)) {
+    return { ok: false, error: "Edited content is missing required fields." };
+  }
+
+  // Coerce vote/agenda numbers defensively — number <input> can yield NaN /
+  // strings from the client; the renderer and charts expect finite numbers.
+  const coerced: ReportContent = {
+    ...content,
+    agendaItems: content.agendaItems.map((a) => ({
+      ...a,
+      order: toInt(a.order),
+    })),
+    discussionLog: content.discussionLog.map((d) => ({
+      ...d,
+      agendaItemRef: d.agendaItemRef == null ? null : toInt(d.agendaItemRef),
+    })),
+    decisions: content.decisions.map((d) => ({
+      ...d,
+      agendaItemRef: d.agendaItemRef == null ? null : toInt(d.agendaItemRef),
+    })),
+    votes: content.votes.map((v) => ({
+      ...v,
+      agendaItemRef: v.agendaItemRef == null ? null : toInt(v.agendaItemRef),
+      forCount: toInt(v.forCount),
+      againstCount: toInt(v.againstCount),
+      abstainCount: toInt(v.abstainCount),
+    })),
+  };
+
+  try {
+    await prisma.report.update({
+      where: { id: reportId },
+      data: { content: coerced },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to save edits.";
+    return { ok: false, error: message };
+  }
+
+  revalidatePath(`/report/${reportId}`);
+  revalidatePath("/samples");
+  revalidatePath("/admin");
+  return { ok: true, data: { id: reportId } };
+}
+
+function toInt(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
 }
