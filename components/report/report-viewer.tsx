@@ -247,13 +247,18 @@ export function ReportViewer({
             {content.coverInfo.governingBody}
           </p>
         </div>
-        {!isGeneral && (
+        <div className="flex flex-wrap items-center gap-3">
+          {!isGeneral && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/report/${reportId}/compliance`}>
+                View compliance audit
+              </Link>
+            </Button>
+          )}
           <Button asChild variant="outline" size="sm">
-            <Link href={`/report/${reportId}/compliance`}>
-              View compliance audit
-            </Link>
+            <a href={`/api/report/${reportId}/pptx`}>Download deck (.pptx)</a>
           </Button>
-        )}
+        </div>
       </div>
 
       <div
