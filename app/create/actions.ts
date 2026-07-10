@@ -4,11 +4,26 @@ import { promises as fs } from "fs";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId, setSessionUserId } from "@/lib/session";
-import { extractPlainText } from "@/lib/transcription";
+import { extractPlainText, transcribeSourceFile } from "@/lib/transcription";
+import {
+  generateComplianceSnapshot,
+  type ComplianceSnapshot,
+  type SpeakerLabel,
+} from "@/lib/report-generation";
 
 export type ActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+// The Instant Compliance Snapshot result: the model's three analytical blocks
+// plus the meeting metadata the read-only view needs to render.
+export type SnapshotResult = ComplianceSnapshot & {
+  meetingTitle: string;
+  company: string;
+  region: string;
+  governingBody: string;
+  meetingDate: string;
+};
 
 type SourceFileRole = "PRIMARY_MEETING" | "SUPPORTING_DOCUMENT";
 
@@ -249,4 +264,88 @@ export async function submitMeetingRequest(input: {
   });
 
   return { ok: true, data: { id: updated.id } };
+}
+
+// Instant Compliance Snapshot — runs AFTER upload, BEFORE tier selection.
+// Self-contained: transcribes the primary file in-memory (reusing an existing
+// transcript if one happens to exist) and generates the lightweight snapshot.
+// Deliberately does NOT persist a Transcript or change the request status — it
+// is a free read-only preview, not part of the request/report lifecycle. Uses
+// the fail-fast budget (short timeout, 2 tries) since the user is waiting.
+export async function runComplianceSnapshot(
+  meetingRequestId: string
+): Promise<ActionResult<SnapshotResult>> {
+  const userId = getSessionUserId();
+  if (!userId) return { ok: false, error: "Sign up first." };
+
+  const mr = await prisma.meetingRequest.findFirst({
+    where: { id: meetingRequestId, userId },
+    include: { sourceFiles: { include: { transcript: true } } },
+  });
+  if (!mr) return { ok: false, error: "Meeting request not found." };
+
+  const primary = mr.sourceFiles.find((f) => f.role === "PRIMARY_MEETING");
+  if (!primary) return { ok: false, error: "Upload a source file first." };
+
+  try {
+    let transcriptRawText: string;
+    let speakerLabels: SpeakerLabel[];
+    if (primary.transcript) {
+      transcriptRawText = primary.transcript.rawText;
+      speakerLabels = primary.transcript.speakerLabels as unknown as SpeakerLabel[];
+    } else {
+      const t = await transcribeSourceFile(primary);
+      transcriptRawText = t.rawText;
+      speakerLabels = t.speakerLabels as unknown as SpeakerLabel[];
+      // Cache the transcript so the later full-report generation reuses it
+      // instead of re-running Deepgram (runTranscription reuses by default).
+      await prisma.transcript.upsert({
+        where: { sourceFileId: primary.id },
+        update: { rawText: t.rawText, speakerLabels: t.speakerLabels, source: t.source },
+        create: {
+          sourceFileId: primary.id,
+          rawText: t.rawText,
+          speakerLabels: t.speakerLabels,
+          source: t.source,
+        },
+      });
+    }
+
+    const supportingDocsText = mr.sourceFiles
+      .filter((f) => f.role === "SUPPORTING_DOCUMENT" && f.extractedText)
+      .map((f) => f.extractedText as string)
+      .join("\n\n");
+
+    const meetingDate = mr.meetingDate.toISOString().slice(0, 10);
+    const snapshot = await generateComplianceSnapshot(
+      {
+        company: mr.company,
+        region: mr.region,
+        governingBody: mr.governingBody,
+        meetingDate,
+        title: mr.title,
+        outputLanguage: mr.outputLanguage,
+        transcriptRawText,
+        speakerLabels,
+        supportingDocsText,
+      },
+      { timeoutMs: 90_000, retries: 2 }
+    );
+
+    return {
+      ok: true,
+      data: {
+        ...snapshot,
+        meetingTitle: mr.title,
+        company: mr.company,
+        region: mr.region,
+        governingBody: mr.governingBody,
+        meetingDate,
+      },
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Compliance snapshot failed.";
+    return { ok: false, error: message };
+  }
 }

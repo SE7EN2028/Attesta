@@ -4,7 +4,7 @@ import { countTokens } from "gpt-tokenizer";
 type ProviderName = "gemini";
 
 type Segment = { start: number; end: number; text: string };
-type SpeakerLabel = { speakerId: string; name: string | null; segments: Segment[] };
+export type SpeakerLabel = { speakerId: string; name: string | null; segments: Segment[] };
 
 export type ReportContent = {
   coverInfo: {
@@ -64,6 +64,15 @@ export type GeneratedReport = {
   numericalData: NumericalData;
   complianceFindings: ComplianceFindingData[];
   generatedBy: ProviderName;
+};
+
+// The Instant Compliance Snapshot — a lightweight, read-only preview produced
+// before tier selection. A trimmed subset of the full report: no narrative
+// content (agenda/discussion/votes/minutes), just the three analytical blocks.
+export type ComplianceSnapshot = {
+  speakerAnalytics: SpeakerAnalytics;
+  numericalData: NumericalData;
+  complianceFindings: ComplianceFindingData[];
 };
 
 export type ReportGenerationBudget = {
@@ -134,7 +143,8 @@ export async function generateReportContent(
 
   const prompt = buildPrompt({ ...promptMetadata, transcriptText });
 
-  const generated = await callModelForJson(prompt, budget);
+  const validated = await callModelForJson(prompt, budget, validateShape);
+  const generated: GeneratedReport = { ...validated, generatedBy: "gemini" };
   // Guarantee no compliance findings for General regardless of what the model
   // returned — General reports are never audited against a rule set.
   if (meetingRequest.region === GENERAL_REGION) {
@@ -340,17 +350,18 @@ function isModelAvailabilityError(message: string): boolean {
 
 // One model: retry on transient overload/network errors, but NOT on quota
 // exhaustion (that just wastes time before the caller falls to the next model).
-async function attemptModel(
+async function attemptModel<T>(
   apiKey: string,
   prompt: string,
   timeoutMs: number,
   model: string,
-  maxAttempts: number
-): Promise<Omit<GeneratedReport, "generatedBy">> {
+  maxAttempts: number,
+  validate: (parsed: unknown) => T
+): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await callProviderWithRetry(apiKey, prompt, timeoutMs, model);
+      return await callProviderWithRetry(apiKey, prompt, timeoutMs, model, validate);
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
@@ -372,10 +383,11 @@ async function attemptModel(
 // Walk the model chain: primary first, fall to the next model on quota
 // exhaustion or persistent unavailability. Non-availability errors (invalid
 // JSON, blocked prompt) surface immediately.
-async function callModelForJson(
+async function callModelForJson<T>(
   prompt: string,
-  budget?: ReportGenerationBudget
-): Promise<GeneratedReport> {
+  budget: ReportGenerationBudget | undefined,
+  validate: (parsed: unknown) => T
+): Promise<T> {
   const apiKey = resolveGeminiApiKey();
   const maxAttempts = budget?.retries ?? TRANSIENT_RETRY_ATTEMPTS;
   const timeoutMs = budget?.timeoutMs ?? PROVIDER_TIMEOUT_MS;
@@ -385,8 +397,7 @@ async function callModelForJson(
     const model = GEMINI_MODELS[i];
     const isLastModel = i === GEMINI_MODELS.length - 1;
     try {
-      const result = await attemptModel(apiKey, prompt, timeoutMs, model, maxAttempts);
-      return { ...result, generatedBy: "gemini" };
+      return await attemptModel(apiKey, prompt, timeoutMs, model, maxAttempts, validate);
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
@@ -404,20 +415,21 @@ async function callModelForJson(
 
 // If the response isn't valid JSON, retry once with a stricter
 // no-markdown-fences instruction before giving up entirely.
-async function callProviderWithRetry(
+async function callProviderWithRetry<T>(
   apiKey: string,
   prompt: string,
   timeoutMs: number,
-  model: string
-): Promise<Omit<GeneratedReport, "generatedBy">> {
+  model: string,
+  validate: (parsed: unknown) => T
+): Promise<T> {
   const first = await callChatCompletion(apiKey, prompt, timeoutMs, model);
   const parsed = tryParseJson(first);
-  if (parsed) return validateShape(parsed);
+  if (parsed) return validate(parsed);
 
   const strictPrompt = `${prompt}\n\nIMPORTANT: Your previous response was not valid JSON. Return ONLY a single valid JSON object — no markdown code fences (no \`\`\`), no commentary, no explanation. The response must start with { and end with }.`;
   const second = await callChatCompletion(apiKey, strictPrompt, timeoutMs, model);
   const parsedSecond = tryParseJson(second);
-  if (parsedSecond) return validateShape(parsedSecond);
+  if (parsedSecond) return validate(parsedSecond);
 
   throw new Error(
     "gemini did not return valid JSON after one retry — aborting rather than storing malformed content."
@@ -559,4 +571,102 @@ function validateShape(parsed: unknown): Omit<GeneratedReport, "generatedBy"> {
     throw new Error("Model JSON did not match the expected report shape.");
   }
   return parsed as Omit<GeneratedReport, "generatedBy">;
+}
+
+/* ---------- Instant Compliance Snapshot (pre-tier, lightweight) ---------- */
+
+// Trimmed response shape — only the three analytical blocks, no narrative
+// report content. Keeps the snapshot fast and cheap vs. the full report.
+const SNAPSHOT_RESPONSE_SHAPE = `{
+  "complianceFindings": [ { "category": "RISK"|"MISSING_DOCUMENT"|"COMPLIANCE_REFERENCE"|"RECOMMENDATION"|"COMPLIANT", "riskLevel": "CRITICAL"|"HIGH"|"MEDIUM"|"ADVISORY"|"COMPLIANT", "description": string, "ruleReference": string|null, "impactDescription": string|null, "confidence": number } ],
+  "speakerAnalytics": [ { "speakerName": string, "talkTimeSeconds": number, "contributionCount": number, "onTopicScore": number } ],
+  "numericalData": [ { "label": string, "value": string, "context": string } ]
+}`;
+
+function validateSnapshotShape(parsed: unknown): ComplianceSnapshot {
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !("speakerAnalytics" in parsed) ||
+    !("numericalData" in parsed) ||
+    !("complianceFindings" in parsed) ||
+    !Array.isArray((parsed as { speakerAnalytics: unknown }).speakerAnalytics) ||
+    !Array.isArray((parsed as { numericalData: unknown }).numericalData) ||
+    !Array.isArray((parsed as { complianceFindings: unknown }).complianceFindings)
+  ) {
+    throw new Error("Model JSON did not match the expected snapshot shape.");
+  }
+  return parsed as ComplianceSnapshot;
+}
+
+// Snapshot prompt. Unlike buildPrompt, supporting-document text IS included
+// (the snapshot reads the meeting + supporting docs together, per spec) and no
+// narrative report content is requested. Reuses complianceInstructions so the
+// France / unverified-region / General honesty rules apply identically.
+function buildSnapshotPrompt(input: {
+  company: string;
+  region: string;
+  governingBody: string;
+  meetingDate: string;
+  title: string;
+  outputLanguage: string;
+  transcriptText: string;
+  supportingDocsText: string;
+}): string {
+  const isGeneral = input.region === GENERAL_REGION;
+  const languageLine = isGeneral
+    ? `LANGUAGE: write narrative fields in ${input.outputLanguage}.`
+    : `LANGUAGE: write narrative fields in ${input.outputLanguage}. Keep any legal/regulatory citations tied to the ${input.region} jurisdiction in their original, untranslated form.`;
+  const docsSection = input.supportingDocsText.trim()
+    ? `\nSUPPORTING DOCUMENTS (read together with the transcript — cross-check figures and claims against these):\n${input.supportingDocsText}\n`
+    : "";
+
+  return `MEETING METADATA
+Company: ${input.company}
+Region: ${input.region}
+Governing body: ${input.governingBody}
+Meeting date: ${input.meetingDate}
+Title: ${input.title}
+Output language: ${input.outputLanguage}
+
+INSTANT COMPLIANCE SNAPSHOT: this is a fast, free, read-only preview. Produce ONLY three outputs and nothing else — complianceFindings, speakerAnalytics, numericalData. Do NOT write minutes, agenda, discussion log, decisions, votes, or any narrative report content.
+${languageLine}
+${docsSection}
+TRANSCRIPT (chronological, diarized where available — primary source of truth):
+${input.transcriptText}
+
+OUTPUT FORMAT — respond with ONE JSON object, exactly this shape:
+${SNAPSHOT_RESPONSE_SHAPE}
+
+speakerAnalytics: one entry per distinct speaker (talkTimeSeconds, contributionCount, onTopicScore 0-100). numericalData: any figures/amounts/counts/dates mentioned in the meeting or the supporting documents. Base everything strictly on the transcript and supporting documents — no invented names, figures, or findings.
+
+${complianceInstructions(input.region, input.governingBody)}`;
+}
+
+export type SnapshotInput = {
+  company: string;
+  region: string;
+  governingBody: string;
+  meetingDate: string;
+  title: string;
+  outputLanguage: string;
+  transcriptRawText: string;
+  speakerLabels: SpeakerLabel[];
+  supportingDocsText: string;
+};
+
+export async function generateComplianceSnapshot(
+  input: SnapshotInput,
+  budget?: ReportGenerationBudget
+): Promise<ComplianceSnapshot> {
+  const transcriptText = compactWhitespace(
+    formatTranscript(input.transcriptRawText, input.speakerLabels)
+  );
+  const prompt = buildSnapshotPrompt({ ...input, transcriptText });
+  const snapshot = await callModelForJson(prompt, budget, validateSnapshotShape);
+  // Same General guarantee as the full report — never audit against a rule set.
+  if (input.region === GENERAL_REGION) {
+    return { ...snapshot, complianceFindings: [] };
+  }
+  return snapshot;
 }

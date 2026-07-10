@@ -9,14 +9,17 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   createDraftMeetingRequest,
+  runComplianceSnapshot,
   signUp,
   submitMeetingRequest,
   uploadSourceFile,
+  type SnapshotResult,
 } from "@/app/create/actions";
 import { runReportGeneration, runTranscription } from "@/app/admin/actions";
 import { getReportIdForRequest } from "@/app/try/actions";
+import { ComplianceSnapshotView } from "@/components/compliance-snapshot-view";
 
-type Step = 1 | 2 | 3 | 4 | "done";
+type Step = 1 | 2 | 3 | "snapshot" | 4 | "done";
 
 type Tier = "ESSENTIAL" | "SCOPE" | "PREMIUM";
 
@@ -267,6 +270,11 @@ export function CreateFlow({
   const [dragging, setDragging] = useState(false);
   const [draggingSupporting, setDraggingSupporting] = useState(false);
   const [live, setLive] = useState<LiveState | null>(null);
+  const [snapshot, setSnapshot] = useState<SnapshotResult | null>(null);
+  const [snapPhase, setSnapPhase] = useState<"idle" | "running" | "error">(
+    "idle"
+  );
+  const [snapError, setSnapError] = useState("");
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
@@ -432,6 +440,24 @@ export function CreateFlow({
     }
   }
 
+  // Runs the free Instant Compliance Snapshot after upload, before tier. On
+  // success it advances to the read-only snapshot screen; on failure it shows
+  // an error with retry. Shared by /create and /try.
+  async function handleRunSnapshot() {
+    if (!state.meetingRequestId) return;
+    setSnapPhase("running");
+    setSnapError("");
+    const res = await runComplianceSnapshot(state.meetingRequestId);
+    if (!res.ok) {
+      setSnapPhase("error");
+      setSnapError(res.error);
+      return;
+    }
+    setSnapshot(res.data);
+    setSnapPhase("idle");
+    dispatch({ type: "GO_TO", step: "snapshot" });
+  }
+
   const step2Valid =
     state.company.trim() &&
     REGIONS.some((r) => r.live && r.value === state.region) &&
@@ -441,6 +467,101 @@ export function CreateFlow({
     state.outputLanguage;
 
   const step1Valid = state.email.includes("@") && state.companyName.trim();
+
+  if (snapPhase === "running") {
+    return (
+      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+        <svg
+          className="h-10 w-10 animate-spin text-rust-400"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+        <Eyebrow className="mt-6">Compliance snapshot</Eyebrow>
+        <h1 className="mt-4 max-w-xl font-serif text-3xl text-cream-100 md:text-4xl">
+          Analyzing your meeting…
+        </h1>
+        <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-cream-300">
+          Building your free, read-only compliance snapshot from the recording
+          and any supporting documents — a quick preview before you choose a
+          tier.
+        </p>
+      </Container>
+    );
+  }
+
+  if (snapPhase === "error") {
+    return (
+      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+        <Eyebrow>Snapshot failed</Eyebrow>
+        <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
+          Couldn&apos;t build the snapshot.
+        </h1>
+        <p className="mt-3 max-w-lg text-[14.5px] leading-relaxed text-rust-400">
+          {snapError}
+        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={handleRunSnapshot}>Retry</Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSnapPhase("idle");
+              dispatch({ type: "GO_TO", step: 3 });
+            }}
+          >
+            ← Back to upload
+          </Button>
+        </div>
+      </Container>
+    );
+  }
+
+  if (state.step === "snapshot" && snapshot) {
+    return (
+      <Container>
+        <div>
+          <Eyebrow>Compliance snapshot · free preview</Eyebrow>
+          <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
+            {snapshot.meetingTitle}
+          </h1>
+          <p className="mt-3 max-w-xl text-[15px] text-cream-300">
+            {snapshot.company} · {snapshot.region} · {snapshot.governingBody} ·
+            read-only
+          </p>
+        </div>
+
+        <div className="mt-10">
+          <ComplianceSnapshotView {...snapshot} />
+        </div>
+
+        <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200/10 pt-8">
+          <Button
+            variant="outline"
+            onClick={() => dispatch({ type: "GO_TO", step: 3 })}
+          >
+            ← Back
+          </Button>
+          <Button onClick={() => dispatch({ type: "GO_TO", step: 4 })}>
+            Continue to tier selection →
+          </Button>
+        </div>
+      </Container>
+    );
+  }
 
   if (state.step === "done") {
     return (
@@ -916,9 +1037,9 @@ export function CreateFlow({
               <Button
                 className="flex-1"
                 disabled={!state.sourceFile || state.submitting}
-                onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+                onClick={handleRunSnapshot}
               >
-                Continue
+                Get free compliance snapshot →
               </Button>
             </div>
           </div>

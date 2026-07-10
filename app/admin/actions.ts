@@ -19,11 +19,12 @@ export type ActionResult<T> =
 const LOCKED_BY = "admin";
 
 export async function runTranscription(
-  meetingRequestId: string
+  meetingRequestId: string,
+  opts?: { force?: boolean }
 ): Promise<ActionResult<{ rawText: string; speakerCount: number }>> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
-    include: { sourceFiles: true },
+    include: { sourceFiles: { include: { transcript: true } } },
   });
 
   if (!meetingRequest) {
@@ -34,6 +35,24 @@ export async function runTranscription(
   );
   if (!primaryFile) {
     return { ok: false, error: "No source file uploaded for this request." };
+  }
+
+  // Reuse a transcript already produced earlier (e.g. by the compliance
+  // snapshot step) instead of re-running Deepgram — unless a re-run is forced
+  // (admin's "Re-run transcription"). Keeps a full /try run to one Deepgram call.
+  if (!opts?.force && primaryFile.transcript) {
+    await prisma.meetingRequest.update({
+      where: { id: meetingRequestId },
+      data: { status: "IN_REVIEW" },
+    });
+    const labels = primaryFile.transcript.speakerLabels;
+    return {
+      ok: true,
+      data: {
+        rawText: primaryFile.transcript.rawText,
+        speakerCount: Array.isArray(labels) ? labels.length : 0,
+      },
+    };
   }
 
   await prisma.meetingRequest.update({

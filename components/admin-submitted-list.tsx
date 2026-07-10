@@ -32,7 +32,9 @@ export function AdminSubmittedList({ initialRows }: { initialRows: Row[] }) {
 
   async function handleRun(id: string) {
     setRowStates((prev) => ({ ...prev, [id]: { status: "running" } }));
-    const result = await runTranscription(id);
+    // Admin always transcribes fresh (a re-run should re-hit Deepgram); the
+    // reuse-existing default is for the /try snapshot→generate path.
+    const result = await runTranscription(id, { force: true });
     if (!result.ok) {
       setRowStates((prev) => ({
         ...prev,
