@@ -316,7 +316,7 @@ function resolveModels(): string[] {
     if (list.length) return list;
   }
   if (process.env.GEMINI_MODEL) return [process.env.GEMINI_MODEL];
-  return ["gemini-3.5-flash", "gemini-2.5-flash"];
+  return ["gemini-2.5-flash", "gemini-3.5-flash"];
 }
 const GEMINI_MODELS = resolveModels();
 

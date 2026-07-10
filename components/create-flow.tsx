@@ -1026,13 +1026,22 @@ export function CreateFlow({
 
             {state.error && <ErrorText className="mt-4">{state.error}</ErrorText>}
 
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <Button
                 variant="outline"
                 disabled={state.submitting}
                 onClick={() => dispatch({ type: "GO_TO", step: 2 })}
               >
                 ← Back
+              </Button>
+              {/* The snapshot is optional: skip straight to tier selection, or
+                  run the free preview first. Both paths transcribe once. */}
+              <Button
+                variant="outline"
+                disabled={!state.sourceFile || state.submitting}
+                onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+              >
+                Skip to full report
               </Button>
               <Button
                 className="flex-1"
