@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { countTokens } from "gpt-tokenizer";
+import { loadPrompts, fill, type PromptResolver } from "@/lib/prompts";
 
 type ProviderName = "gemini";
 
@@ -131,19 +132,27 @@ export async function generateReportContent(
   const supportingDocsCombinedText = supportingDocs
     .map((f) => f.extractedText as string)
     .join("\n\n");
+  // Load admin prompt overrides once (DB, with code fallback) and reuse the
+  // resolver for both the token-count pass and the real prompt build.
+  const prompts = await loadPrompts();
   const rawTranscriptTokens = countTokens(rawTranscriptText);
   const transcriptTokens = countTokens(transcriptText);
   const supportingDocsTokens = countTokens(supportingDocsCombinedText);
   const fixedPromptTokens = countTokens(
-    buildPrompt({ ...promptMetadata, transcriptText: "" })
+    buildPrompt({ ...promptMetadata, transcriptText: "" }, prompts)
   );
   console.log(
     `[report-generation] token breakdown — transcript raw: ${rawTranscriptTokens}, transcript after whitespace compaction: ${transcriptTokens}, supporting docs (excluded from prompt): ${supportingDocsTokens}, fixed prompt/schema: ${fixedPromptTokens}, total sent: ${transcriptTokens + fixedPromptTokens}`
   );
 
-  const prompt = buildPrompt({ ...promptMetadata, transcriptText });
+  const prompt = buildPrompt({ ...promptMetadata, transcriptText }, prompts);
 
-  const validated = await callModelForJson(prompt, budget, validateShape);
+  const validated = await callModelForJson(
+    prompt,
+    prompts.resolve("system"),
+    budget,
+    validateShape
+  );
   const generated: GeneratedReport = { ...validated, generatedBy: "gemini" };
   // Guarantee no compliance findings for General regardless of what the model
   // returned — General reports are never audited against a rule set.
@@ -188,15 +197,16 @@ function compactWhitespace(text: string): string {
     .trim();
 }
 
-function tierInstructions(tier: string): string {
+function tierInstructions(tier: string, prompts: PromptResolver): string {
+  // Branch stays in code; only the text is resolved from the prompt library.
   switch (tier) {
     case "ESSENTIAL":
-      return "ESSENTIAL: chronological summary only. executiveSummary + discussionLog in time order. agendaItems/decisions/votes = empty arrays, always.";
+      return prompts.resolve("tier_essential");
     case "PREMIUM":
-      return "PREMIUM: full agenda structure (agendaItems ordered; discussionLog/decisions/votes reference them via agendaItemRef). Fill decisions/votes where the transcript supports them. executiveSummary + closingNotes in a formal legal register.";
+      return prompts.resolve("tier_premium");
     case "SCOPE":
     default:
-      return "SCOPE: full agenda structure (agendaItems ordered; discussionLog/decisions/votes reference them via agendaItemRef). Fill decisions/votes where the transcript supports them.";
+      return prompts.resolve("tier_scope");
   }
 }
 
@@ -232,39 +242,53 @@ const VERIFIED_RULESET_REGIONS = new Set(["France"]);
 // generateReportContent also force-clears them (belt and suspenders).
 export const GENERAL_REGION = "General";
 
-function complianceInstructions(region: string, governingBody: string): string {
+function complianceInstructions(
+  region: string,
+  governingBody: string,
+  prompts: PromptResolver
+): string {
+  // Branch (which region gets which text) stays in code; the prose is resolved
+  // from the prompt library and {{governingBody}}/{{region}} filled here.
   if (region === GENERAL_REGION) {
-    return `COMPLIANCE FINDINGS: return an empty array []. This is a general professional meeting report and is NOT audited against any regulatory, statutory, or works-council framework. Produce no compliance findings and no legal or regulatory references of any kind.`;
+    return prompts.resolve("compliance_general");
   }
 
-  const core = `COMPLIANCE FINDINGS: audit the transcript itself (not the report you just wrote) against standard works-council procedure for a ${governingBody} meeting. Check, where the transcript gives evidence either way: quorum (was a headcount or present/total stated, and does it meet a typical threshold?), notice/convocation period before the meeting, whether votes were called with a recorded headcount vs. just "no objection", approval of prior minutes, and standard documents a meeting of this type usually references (attendance sheet, written employer answers to prior questions) that are notably absent or notably present.
-Each finding must cite what in the transcript supports it (fold that into description/impactDescription) — do not invent findings the transcript gives no evidence for. If the transcript is silent on something (e.g. convocation timing), either omit it or file it as MISSING_DOCUMENT/ADVISORY with lower confidence, not as a confident RISK. confidence (0-100) reflects your certainty given what the transcript actually shows. Include both problems (RISK/MISSING_DOCUMENT/RECOMMENDATION) and things done correctly (COMPLIANT) if evidenced. Empty array if the transcript gives no basis for any finding.`;
+  const core = fill(prompts.resolve("compliance_core"), { governingBody });
 
   if (VERIFIED_RULESET_REGIONS.has(region)) {
-    return `${core}
-This meeting is under the verified ${region} rule set. You may also check France-specific items where evidenced (e.g. BDESE consultation, statutory notice periods). ruleReference is a real statute/article (e.g. French Labour Code) ONLY if you are confident of the exact citation for ${region}, otherwise null — never invent a citation.`;
+    const suffix = fill(prompts.resolve("compliance_verified_suffix"), {
+      region,
+    });
+    return `${core}\n${suffix}`;
   }
 
-  return `${core}
-IMPORTANT — ${region} is supported but Attesta has NOT verified a ${region} statutory rule set. Keep every finding GENERAL and procedural: observations that hold for any works-council meeting, framed as general good practice, NOT as a jurisdiction-specific legal audit. Do NOT cite, name, or paraphrase any ${region} statute, article, or labour-code provision. ruleReference MUST be null for every finding. Do not imply these findings are checked against ${region} law.`;
+  const suffix = fill(prompts.resolve("compliance_unverified_suffix"), {
+    region,
+  });
+  return `${core}\n${suffix}`;
 }
 
 // NOTE: supporting-document text is deliberately not a param here — see
 // the comment in generateReportContent. Re-add a supportingDocs param and
 // section when that scope cut is reversed.
-function buildPrompt(input: {
-  company: string;
-  region: string;
-  governingBody: string;
-  meetingDate: string;
-  title: string;
-  outputLanguage: string;
-  tier: string;
-  transcriptText: string;
-}): string {
+function buildPrompt(
+  input: {
+    company: string;
+    region: string;
+    governingBody: string;
+    meetingDate: string;
+    title: string;
+    outputLanguage: string;
+    tier: string;
+    transcriptText: string;
+  },
+  prompts: PromptResolver
+): string {
   const isGeneral = input.region === GENERAL_REGION;
+  // Assembly keeps the exact surrounding newlines the literal used; the prose
+  // itself is resolved from the prompt library.
   const generalFraming = isGeneral
-    ? `\nGENERAL REPORT: produce a clear, professional meeting record — attendance, agenda, discussion log, decisions and votes where the transcript supports them. Keep it jurisdiction-neutral: do NOT reference any country's labour law, works-council framework, statutes, or legal/regulatory citations.\n`
+    ? `\n${prompts.resolve("report_general_framing")}\n`
     : "";
   const languageLine = isGeneral
     ? `LANGUAGE: write narrative fields in ${input.outputLanguage}.`
@@ -279,7 +303,7 @@ Title: ${input.title}
 Output language: ${input.outputLanguage}
 Report tier: ${input.tier}
 
-TIER: ${tierInstructions(input.tier)}
+TIER: ${tierInstructions(input.tier, prompts)}
 ${generalFraming}
 ${languageLine}
 
@@ -289,13 +313,10 @@ ${input.transcriptText}
 OUTPUT FORMAT — respond with ONE JSON object, exactly this shape:
 ${RESPONSE_SHAPE}
 
-Base every field strictly on the transcript above — no invented names, votes, or figures. onTopicScore is 0-100. numericalData covers any figures/amounts/counts/dates mentioned. Use an empty array or a short honest note instead of fabricating content.
+${prompts.resolve("report_base_instruction")}
 
-${complianceInstructions(input.region, input.governingBody)}`;
+${complianceInstructions(input.region, input.governingBody, prompts)}`;
 }
-
-const SYSTEM_PROMPT =
-  "You are Attesta's report-generation engine. You turn a meeting transcript (plus optional supporting reference documents) into structured statutory meeting minutes. You always respond with a single valid JSON object and nothing else — no markdown code fences, no commentary before or after the JSON.";
 
 // Gemini is the sole provider. Groq (12K TPM free-tier cap) and NIM
 // (shared-pool hard capacity ceiling — "Worker local total request limit
@@ -353,6 +374,7 @@ function isModelAvailabilityError(message: string): boolean {
 async function attemptModel<T>(
   apiKey: string,
   prompt: string,
+  systemPrompt: string,
   timeoutMs: number,
   model: string,
   maxAttempts: number,
@@ -361,7 +383,7 @@ async function attemptModel<T>(
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await callProviderWithRetry(apiKey, prompt, timeoutMs, model, validate);
+      return await callProviderWithRetry(apiKey, prompt, systemPrompt, timeoutMs, model, validate);
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
@@ -385,6 +407,7 @@ async function attemptModel<T>(
 // JSON, blocked prompt) surface immediately.
 async function callModelForJson<T>(
   prompt: string,
+  systemPrompt: string,
   budget: ReportGenerationBudget | undefined,
   validate: (parsed: unknown) => T
 ): Promise<T> {
@@ -397,7 +420,7 @@ async function callModelForJson<T>(
     const model = GEMINI_MODELS[i];
     const isLastModel = i === GEMINI_MODELS.length - 1;
     try {
-      return await attemptModel(apiKey, prompt, timeoutMs, model, maxAttempts, validate);
+      return await attemptModel(apiKey, prompt, systemPrompt, timeoutMs, model, maxAttempts, validate);
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
@@ -418,16 +441,17 @@ async function callModelForJson<T>(
 async function callProviderWithRetry<T>(
   apiKey: string,
   prompt: string,
+  systemPrompt: string,
   timeoutMs: number,
   model: string,
   validate: (parsed: unknown) => T
 ): Promise<T> {
-  const first = await callChatCompletion(apiKey, prompt, timeoutMs, model);
+  const first = await callChatCompletion(apiKey, prompt, systemPrompt, timeoutMs, model);
   const parsed = tryParseJson(first);
   if (parsed) return validate(parsed);
 
   const strictPrompt = `${prompt}\n\nIMPORTANT: Your previous response was not valid JSON. Return ONLY a single valid JSON object — no markdown code fences (no \`\`\`), no commentary, no explanation. The response must start with { and end with }.`;
-  const second = await callChatCompletion(apiKey, strictPrompt, timeoutMs, model);
+  const second = await callChatCompletion(apiKey, strictPrompt, systemPrompt, timeoutMs, model);
   const parsedSecond = tryParseJson(second);
   if (parsedSecond) return validate(parsedSecond);
 
@@ -445,6 +469,7 @@ const PROVIDER_TIMEOUT_MS = 400_000;
 async function callChatCompletion(
   apiKey: string,
   prompt: string,
+  systemPrompt: string,
   timeoutMs: number,
   model: string
 ): Promise<string> {
@@ -469,7 +494,7 @@ async function callChatCompletion(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.2,
@@ -603,16 +628,19 @@ function validateSnapshotShape(parsed: unknown): ComplianceSnapshot {
 // (the snapshot reads the meeting + supporting docs together, per spec) and no
 // narrative report content is requested. Reuses complianceInstructions so the
 // France / unverified-region / General honesty rules apply identically.
-function buildSnapshotPrompt(input: {
-  company: string;
-  region: string;
-  governingBody: string;
-  meetingDate: string;
-  title: string;
-  outputLanguage: string;
-  transcriptText: string;
-  supportingDocsText: string;
-}): string {
+function buildSnapshotPrompt(
+  input: {
+    company: string;
+    region: string;
+    governingBody: string;
+    meetingDate: string;
+    title: string;
+    outputLanguage: string;
+    transcriptText: string;
+    supportingDocsText: string;
+  },
+  prompts: PromptResolver
+): string {
   const isGeneral = input.region === GENERAL_REGION;
   const languageLine = isGeneral
     ? `LANGUAGE: write narrative fields in ${input.outputLanguage}.`
@@ -629,7 +657,7 @@ Meeting date: ${input.meetingDate}
 Title: ${input.title}
 Output language: ${input.outputLanguage}
 
-INSTANT COMPLIANCE SNAPSHOT: this is a fast, free, read-only preview. Produce ONLY three outputs and nothing else — complianceFindings, speakerAnalytics, numericalData. Do NOT write minutes, agenda, discussion log, decisions, votes, or any narrative report content.
+${prompts.resolve("snapshot_instruction")}
 ${languageLine}
 ${docsSection}
 TRANSCRIPT (chronological, diarized where available — primary source of truth):
@@ -638,9 +666,9 @@ ${input.transcriptText}
 OUTPUT FORMAT — respond with ONE JSON object, exactly this shape:
 ${SNAPSHOT_RESPONSE_SHAPE}
 
-speakerAnalytics: one entry per distinct speaker (talkTimeSeconds, contributionCount, onTopicScore 0-100). numericalData: any figures/amounts/counts/dates mentioned in the meeting or the supporting documents. Base everything strictly on the transcript and supporting documents — no invented names, figures, or findings.
+${prompts.resolve("snapshot_base_instruction")}
 
-${complianceInstructions(input.region, input.governingBody)}`;
+${complianceInstructions(input.region, input.governingBody, prompts)}`;
 }
 
 export type SnapshotInput = {
@@ -662,8 +690,14 @@ export async function generateComplianceSnapshot(
   const transcriptText = compactWhitespace(
     formatTranscript(input.transcriptRawText, input.speakerLabels)
   );
-  const prompt = buildSnapshotPrompt({ ...input, transcriptText });
-  const snapshot = await callModelForJson(prompt, budget, validateSnapshotShape);
+  const prompts = await loadPrompts();
+  const prompt = buildSnapshotPrompt({ ...input, transcriptText }, prompts);
+  const snapshot = await callModelForJson(
+    prompt,
+    prompts.resolve("system"),
+    budget,
+    validateSnapshotShape
+  );
   // Same General guarantee as the full report — never audit against a rule set.
   if (input.region === GENERAL_REGION) {
     return { ...snapshot, complianceFindings: [] };

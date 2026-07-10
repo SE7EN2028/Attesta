@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { Nav } from "@/components/nav";
 import { Container } from "@/components/container";
+import Link from "next/link";
 import { Eyebrow } from "@/components/eyebrow";
+import { Button } from "@/components/ui/button";
 import { AdminSubmittedList } from "@/components/admin-submitted-list";
 import { AdminReviewList } from "@/components/admin-review-list";
 import { AdminCompletedList } from "@/components/admin-completed-list";
@@ -101,7 +103,12 @@ export default async function AdminPage() {
       <Nav />
       <main className="min-h-screen bg-ink-900 py-16">
         <Container>
-          <Eyebrow>Admin</Eyebrow>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <Eyebrow>Admin</Eyebrow>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/prompts">Prompt library</Link>
+            </Button>
+          </div>
           <h1 className="mt-5 font-serif text-3xl text-cream-100 md:text-4xl">
             Submitted requests
           </h1>

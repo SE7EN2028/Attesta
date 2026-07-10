@@ -109,3 +109,18 @@ model ComplianceFinding {
   impactDescription String?
   confidence        Int // 0-100
 }
+
+// Admin-editable prompt overrides for the report engine. Only rows that exist
+// override the hardcoded default; the resolver in lib/prompts.ts falls back to
+// PROMPT_DEFAULTS (the single source of truth) when a key has no row, so an
+// empty table means "all defaults". `key` matches a PromptKey in lib/prompts.ts.
+// Only the instructional TEXT lives here — prompt assembly and response-shape
+// validation stay in code (see lib/report-generation.ts).
+model Prompt {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
