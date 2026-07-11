@@ -1,7 +1,7 @@
 "use server";
 
-import { promises as fs } from "fs";
 import path from "path";
+import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId, setSessionUserId } from "@/lib/session";
 import { extractPlainText, transcribeSourceFile } from "@/lib/transcription";
@@ -197,19 +197,21 @@ export async function uploadSourceFile(
         data: { meetingRequestId, type, role, fileName: safeFileName, storageUrl: "" },
       });
 
-  // Each file lives in its own dir keyed by SourceFile id so supporting
-  // docs with the same original filename never collide on disk.
-  const dir = path.join(process.cwd(), "uploads", meetingRequestId, sourceFile.id);
-  await fs.mkdir(dir, { recursive: true });
-  const absolutePath = path.join(dir, safeFileName);
-  await fs.writeFile(absolutePath, buffer);
-  const storageUrl = `/uploads/${meetingRequestId}/${sourceFile.id}/${safeFileName}`;
+  // Store the file in Vercel Blob (public) — keyed by SourceFile id so
+  // supporting docs with the same filename never collide, and re-uploading a
+  // primary overwrites in place. storageUrl is the returned public https URL;
+  // no local disk (which doesn't survive Vercel's serverless filesystem).
+  const { url: storageUrl } = await put(
+    `${meetingRequestId}/${sourceFile.id}/${safeFileName}`,
+    buffer,
+    { access: "public", allowOverwrite: true }
+  );
 
   // Supporting documents don't get transcribed — just pull their text now
-  // so it's ready to feed into report generation later.
+  // (from the in-memory buffer) so it's ready to feed into report generation.
   const extractedText =
     role === "SUPPORTING_DOCUMENT"
-      ? await extractPlainText(absolutePath, type as "DOCX" | "PDF")
+      ? await extractPlainText(buffer, type as "DOCX" | "PDF")
       : null;
 
   sourceFile = await prisma.sourceFile.update({

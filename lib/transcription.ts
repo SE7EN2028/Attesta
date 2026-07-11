@@ -1,5 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { DeepgramClient } from "@deepgram/sdk";
 
 export type Segment = { start: number; end: number; text: string };
@@ -11,23 +9,30 @@ export type TranscriptionResult = {
   source: "DEEPGRAM" | "MANUAL";
 };
 
-export function resolveUploadPath(storageUrl: string): string {
-  return path.join(process.cwd(), storageUrl.replace(/^\//, ""));
+// Source files live in Vercel Blob (SourceFile.storageUrl is the public https
+// URL) — not on local disk, which doesn't survive Vercel's serverless
+// filesystem. Fetch the bytes into memory for Deepgram / text extraction.
+async function fetchSourceBuffer(storageUrl: string): Promise<Buffer> {
+  const res = await fetch(storageUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch source file (HTTP ${res.status}).`);
+  }
+  return Buffer.from(await res.arrayBuffer());
 }
 
 export async function transcribeSourceFile(sourceFile: {
   type: string;
   storageUrl: string;
 }): Promise<TranscriptionResult> {
-  const absolutePath = resolveUploadPath(sourceFile.storageUrl);
+  const buffer = await fetchSourceBuffer(sourceFile.storageUrl);
 
   switch (sourceFile.type) {
     case "AUDIO":
     case "VIDEO":
-      return transcribeWithDeepgram(absolutePath);
+      return transcribeWithDeepgram(buffer);
     case "DOCX":
     case "PDF": {
-      const rawText = await extractPlainText(absolutePath, sourceFile.type);
+      const rawText = await extractPlainText(buffer, sourceFile.type);
       return { rawText, speakerLabels: [], source: "MANUAL" };
     }
     default:
@@ -36,25 +41,22 @@ export async function transcribeSourceFile(sourceFile: {
 }
 
 // Plain-text extraction with no transcription semantics — used both for
-// DOCX/PDF meeting sources above and for supporting documents, which only
-// ever need their raw text (see lib/transcription.ts callers in
-// app/create/actions.ts).
+// DOCX/PDF meeting sources above and for supporting documents (which only ever
+// need their raw text). Takes the in-memory buffer directly — callers already
+// hold it (upload) or fetch it from Blob (transcribeSourceFile).
 export async function extractPlainText(
-  absolutePath: string,
+  buffer: Buffer,
   type: "DOCX" | "PDF"
 ): Promise<string> {
-  return type === "DOCX" ? extractDocx(absolutePath) : extractPdf(absolutePath);
+  return type === "DOCX" ? extractDocx(buffer) : extractPdf(buffer);
 }
 
-async function transcribeWithDeepgram(
-  absolutePath: string
-): Promise<TranscriptionResult> {
+async function transcribeWithDeepgram(buffer: Buffer): Promise<TranscriptionResult> {
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) {
     throw new Error("DEEPGRAM_API_KEY is not set.");
   }
 
-  const buffer = await fs.readFile(absolutePath);
   const deepgram = new DeepgramClient({ apiKey });
 
   const response = await deepgram.listen.v1.media.transcribeFile(buffer, {
@@ -119,16 +121,14 @@ async function transcribeWithDeepgram(
   return { rawText, speakerLabels, source: "DEEPGRAM" };
 }
 
-async function extractDocx(absolutePath: string): Promise<string> {
+async function extractDocx(buffer: Buffer): Promise<string> {
   const mammoth = await import("mammoth");
-  const buffer = await fs.readFile(absolutePath);
   const { value } = await mammoth.extractRawText({ buffer });
   return value.trim();
 }
 
-async function extractPdf(absolutePath: string): Promise<string> {
+async function extractPdf(buffer: Buffer): Promise<string> {
   const { PDFParse } = await import("pdf-parse");
-  const buffer = await fs.readFile(absolutePath);
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
