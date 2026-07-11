@@ -1043,22 +1043,35 @@ export function CreateFlow({
               >
                 ← Back
               </Button>
-              {/* The snapshot is optional: skip straight to tier selection, or
-                  run the free preview first. Both paths transcribe once. */}
-              <Button
-                variant="outline"
-                disabled={!state.sourceFile || state.submitting}
-                onClick={() => dispatch({ type: "GO_TO", step: 4 })}
-              >
-                Skip to full report
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={!state.sourceFile || state.submitting}
-                onClick={handleRunSnapshot}
-              >
-                Get free compliance snapshot →
-              </Button>
+              {mode === "live" ? (
+                // /try only: the free snapshot preview is optional — skip
+                // straight to the full report, or run the snapshot first.
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={!state.sourceFile || state.submitting}
+                    onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+                  >
+                    Skip to full report
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    disabled={!state.sourceFile || state.submitting}
+                    onClick={handleRunSnapshot}
+                  >
+                    Get free compliance snapshot →
+                  </Button>
+                </>
+              ) : (
+                // /create: straight to tier + report request, no snapshot.
+                <Button
+                  className="flex-1"
+                  disabled={!state.sourceFile || state.submitting}
+                  onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+                >
+                  Continue →
+                </Button>
+              )}
             </div>
           </div>
 
