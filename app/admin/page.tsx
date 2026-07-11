@@ -8,6 +8,10 @@ import { AdminSubmittedList } from "@/components/admin-submitted-list";
 import { AdminReviewList } from "@/components/admin-review-list";
 import { AdminCompletedList } from "@/components/admin-completed-list";
 
+// Reads live meeting requests / reports from the DB — must render per-request,
+// not be prerendered static (which freezes it to a build-time snapshot).
+export const dynamic = "force-dynamic";
+
 type SourceFileLink = {
   id: string;
   fileName: string;

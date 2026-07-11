@@ -11,6 +11,10 @@ import type {
 } from "@/lib/report-generation";
 import { findSampleReport } from "@/lib/sample-report";
 
+// Reads the pinned sample from the DB — render per-request so newly locked
+// reports appear without a redeploy.
+export const dynamic = "force-dynamic";
+
 export default async function SamplesPage() {
   const report = await findSampleReport();
 

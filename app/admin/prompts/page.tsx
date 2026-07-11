@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { PromptLibrary } from "@/components/admin/prompt-library";
 import { PROMPT_DEFAULTS, PROMPT_KEYS } from "@/lib/prompts";
 
+// Reads saved prompt overrides from the DB — render per-request, not static.
+export const dynamic = "force-dynamic";
+
 // Admin prompt library. Lists every registry prompt pre-filled with its
 // current text (DB override if present, else the code default), so the page
 // works with an empty Prompt table.

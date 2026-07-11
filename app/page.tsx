@@ -14,6 +14,10 @@ import { WhoItsFor } from "@/components/who-its-for";
 import { FinalCta } from "@/components/final-cta";
 import { Footer } from "@/components/footer";
 
+// SampleReportSection reads the DB (the pinned sample). Render per-request so it
+// reflects the live DB, not a stale build-time snapshot.
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   return (
     <>
