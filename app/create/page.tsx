@@ -1,11 +1,10 @@
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE } from "@/lib/session";
+import { getSessionUserId } from "@/lib/session";
 import { Nav } from "@/components/nav";
 import { CreateFlow } from "@/components/create-flow";
 
 export default async function CreatePage() {
-  const userId = cookies().get(SESSION_COOKIE)?.value;
+  const userId = getSessionUserId();
   const user = userId
     ? await prisma.user.findUnique({ where: { id: userId } })
     : null;

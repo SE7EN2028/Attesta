@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE } from "@/lib/session";
+import { getSessionUserId } from "@/lib/session";
 import { Nav } from "@/components/nav";
 import { Container } from "@/components/container";
 import { CreateFlow } from "@/components/create-flow";
@@ -11,7 +10,7 @@ import { CreateFlow } from "@/components/create-flow";
 // synchronously and redirects to the generated report, instead of the
 // request → human-review queue that /create uses.
 export default async function TryPage() {
-  const userId = cookies().get(SESSION_COOKIE)?.value;
+  const userId = getSessionUserId();
   const user = userId
     ? await prisma.user.findUnique({ where: { id: userId } })
     : null;
