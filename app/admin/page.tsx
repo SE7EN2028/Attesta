@@ -96,6 +96,7 @@ export default async function AdminPage() {
     tier: mr.tier,
     reportStatus: mr.report!.status,
     lockedBy: mr.report!.lockedBy,
+    meetingRequestStatus: mr.status,
   }));
 
   return (

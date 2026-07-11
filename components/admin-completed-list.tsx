@@ -15,12 +15,14 @@ type Row = {
   tier: string;
   reportStatus: string;
   lockedBy: string | null;
+  meetingRequestStatus: string;
 };
 
 type LockState =
   | { status: "idle" }
   | { status: "running" }
-  | { status: "error"; error: string };
+  | { status: "error"; error: string }
+  | { status: "warning"; warning: string };
 
 export function AdminCompletedList({ initialRows }: { initialRows: Row[] }) {
   const router = useRouter();
@@ -39,13 +41,23 @@ export function AdminCompletedList({ initialRows }: { initialRows: Row[] }) {
       }));
       return;
     }
+    if (result.emailWarning) {
+      // Hoist out of the closure so the truthy narrowing (string, not
+      // string | undefined) is preserved for the warning field.
+      const warning = result.emailWarning;
+      setLockStates((prev) => ({
+        ...prev,
+        [meetingRequestId]: { status: "warning", warning },
+      }));
+    } else {
+      setLockStates((prev) => ({
+        ...prev,
+        [meetingRequestId]: { status: "idle" },
+      }));
+    }
     // Server action already revalidated /admin, /samples and the report
-    // path — refresh so this list reflects the new LOCKED state.
+    // path — refresh so this list reflects the new LOCKED/DISPATCHED state.
     router.refresh();
-    setLockStates((prev) => ({
-      ...prev,
-      [meetingRequestId]: { status: "idle" },
-    }));
   }
 
   if (initialRows.length === 0) {
@@ -59,6 +71,7 @@ export function AdminCompletedList({ initialRows }: { initialRows: Row[] }) {
       {initialRows.map((row) => {
         const lock = lockStates[row.meetingRequestId] ?? { status: "idle" };
         const isLocked = row.reportStatus === "LOCKED";
+        const isDispatched = row.meetingRequestStatus === "DISPATCHED";
         return (
           <div
             key={row.reportId}
@@ -82,10 +95,19 @@ export function AdminCompletedList({ initialRows }: { initialRows: Row[] }) {
                 <Button asChild variant="outline" size="sm">
                   <Link href={`/report/${row.reportId}`}>View report</Link>
                 </Button>
-                {isLocked ? (
+                {isDispatched ? (
                   <span className="rounded-full border border-green-400/30 bg-green-400/5 px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.08em] text-green-400">
-                    Locked ✓
+                    Sent ✓
                   </span>
+                ) : isLocked ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={lock.status === "running"}
+                    onClick={() => handleLock(row.meetingRequestId)}
+                  >
+                    {lock.status === "running" ? "Retrying…" : "Resend email"}
+                  </Button>
                 ) : (
                   <>
                     <Button asChild variant="outline" size="sm">
@@ -107,6 +129,16 @@ export function AdminCompletedList({ initialRows }: { initialRows: Row[] }) {
               <p className="mt-4 rounded border border-rust-400/30 bg-rust-400/5 px-4 py-3 text-[13px] text-rust-400">
                 {lock.error}
               </p>
+            )}
+            {lock.status === "warning" && (
+              <div className="mt-4">
+                <p className="rounded border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-[13px] text-amber-500">
+                  Locked — email not sent
+                </p>
+                <p className="mt-2 text-[12px] text-cream-500">
+                  {lock.warning}
+                </p>
+              </div>
             )}
           </div>
         );

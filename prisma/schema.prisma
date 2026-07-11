@@ -92,6 +92,7 @@ model Report {
   status           String // "DRAFT" | "LOCKED"
   lockedAt         DateTime?
   lockedBy         String?
+  dispatchedAt     DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
