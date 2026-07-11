@@ -500,6 +500,9 @@ export function CreateFlow({
           and any supporting documents — a quick preview before you choose a
           tier.
         </p>
+        <p className="mt-3 max-w-md text-[13px] leading-relaxed text-cream-500">
+          Large or complex meetings can take a minute or more to analyze.
+        </p>
       </Container>
     );
   }
@@ -655,6 +658,12 @@ export function CreateFlow({
         <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-cream-300">
           {subtext}
         </p>
+        {live.phase === "generating" && (
+          <p className="mt-3 max-w-md text-[13px] leading-relaxed text-cream-500">
+            Large or complex meetings take longer — a full report can run
+            several minutes.
+          </p>
+        )}
       </Container>
     );
   }
