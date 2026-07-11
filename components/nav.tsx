@@ -35,6 +35,10 @@ export function Nav() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {/* Internal/operator entry — muted outline, not a customer CTA. */}
+          <Button asChild size="sm" variant="outline">
+            <Link href="/admin">Admin panel</Link>
+          </Button>
           <Button asChild size="sm" variant="outline">
             <Link href="/try">Try it live</Link>
           </Button>

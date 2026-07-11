@@ -68,7 +68,13 @@ export function Footer() {
 
         <div className="mt-16 flex flex-col gap-3 border-t border-cream-200/10 pt-6 font-mono text-[11px] uppercase tracking-[0.06em] text-cream-500 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 Attesta · France (CSE) live — more regions coming</p>
-          <p>Encrypted at rest &amp; in transit</p>
+          <div className="flex items-center gap-5">
+            <p>Encrypted at rest &amp; in transit</p>
+            {/* Internal operator link — not a customer-facing CTA. */}
+            <Link href="/admin" className="text-cream-500 hover:text-rust-400">
+              Admin
+            </Link>
+          </div>
         </div>
       </Container>
     </footer>

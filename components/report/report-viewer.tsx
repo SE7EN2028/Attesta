@@ -255,7 +255,7 @@ export function ReportViewer({
               </Link>
             </Button>
           )}
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="primary" size="sm">
             <a href={`/api/report/${reportId}/pptx`}>Download deck (.pptx)</a>
           </Button>
         </div>
