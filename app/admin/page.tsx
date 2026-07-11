@@ -110,6 +110,10 @@ export default async function AdminPage() {
               <Link href="/admin/prompts">Prompt library</Link>
             </Button>
           </div>
+          <p className="mt-4 max-w-2xl font-mono text-[12px] leading-relaxed text-cream-500">
+            Admin / operator side of the pipeline — process client requests from
+            transcription through to a locked, dispatched report.
+          </p>
           <h1 className="mt-5 font-serif text-3xl text-cream-100 md:text-4xl">
             Submitted requests
           </h1>
