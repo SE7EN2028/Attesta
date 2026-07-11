@@ -8,15 +8,7 @@ const nextConfig = {
     // These are Node-native libraries (native bindings / worker files /
     // complex conditional exports) that break when webpack tries to bundle
     // them for server actions — keep them as real `require()`s instead.
-    serverComponentsExternalPackages: [
-      "pdf-parse",
-      "mammoth",
-      "@deepgram/sdk",
-      // Native binding (skia .node binary) pulled in by pdf-parse for the
-      // DOMMatrix polyfill — must stay external or webpack tries to bundle the
-      // binary and the build fails.
-      "@napi-rs/canvas",
-    ],
+    serverComponentsExternalPackages: ["mammoth", "@deepgram/sdk"],
   },
 };
 
