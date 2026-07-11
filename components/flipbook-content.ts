@@ -13,13 +13,16 @@ const INK = "#1A222E",
   GRN = "#2E6E4E",
   AMB = "#A97A1F",
   BLU = "#3E5D7C",
-  PAPER = "#FDFCF8",
+  PAPER = "#F4EFE3",
+  RULE_LINE = "#EAE3D3",
   WASH = "#F1EDE2";
 
 export const C = { INK, MUT, RULE, RED, GRN, AMB, BLU, PAPER, WASH };
 
 export const pg = (inner: string, pad?: string) =>
-  `<div style="width:100%;height:100%;background:${PAPER};box-sizing:border-box;padding:${pad || "8% 9% 12%"};font-family:${F_SANS};color:${INK};display:flex;flex-direction:column;overflow:hidden">${inner}</div>`;
+  // Warm cream page with faint ruled lines (ledger/notebook feel) instead of a
+  // flat bright-white surface.
+  `<div style="width:100%;height:100%;background:repeating-linear-gradient(${PAPER} 0px,${PAPER} 21px,${RULE_LINE} 21px,${RULE_LINE} 22px);box-sizing:border-box;padding:${pad || "8% 9% 12%"};font-family:${F_SANS};color:${INK};display:flex;flex-direction:column;overflow:hidden">${inner}</div>`;
 export const rh = (l: string, r: string) =>
   `<div style="display:flex;justify-content:space-between;gap:8px;font-family:${F_MONO};font-size:6.8px;letter-spacing:.13em;text-transform:uppercase;color:${MUT};border-bottom:1px solid ${RULE};padding-bottom:5px;margin-bottom:9px"><span>${l}</span><span>${r}</span></div>`;
 export const h = (t: string) =>

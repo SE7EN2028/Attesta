@@ -1163,7 +1163,7 @@ export function CreateFlow({
 
 function SummaryCard({ state }: { state: FlowState }) {
   return (
-    <div className="rounded-md bg-paper-500 p-8 text-slate-900">
+    <div className="att-lined-paper rounded-md p-8 text-slate-900">
       <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
         Summary report · builds as you type
       </p>

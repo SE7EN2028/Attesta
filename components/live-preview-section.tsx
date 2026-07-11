@@ -276,7 +276,7 @@ export function LivePreviewSection() {
                   Summary report · builds as you type
                 </div>
                 <div
-                  className="relative box-border flex w-[min(300px,80%)] flex-col rounded-sm border border-slate-900/20 bg-paper-100 p-6 text-slate-900 shadow-[0_24px_48px_-26px_rgba(19,26,36,0.45)]"
+                  className="att-lined-paper relative box-border flex w-[min(300px,80%)] flex-col rounded-sm border border-slate-900/20 p-6 text-slate-900 shadow-[0_24px_48px_-26px_rgba(19,26,36,0.45)]"
                   style={{ aspectRatio: "210 / 297" }}
                 >
                   <div className="flex min-h-0 flex-1 flex-col border border-slate-900 p-4">

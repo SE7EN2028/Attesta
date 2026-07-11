@@ -115,6 +115,16 @@
   .animate-att-pulse {
     animation: attPulse 1s infinite;
   }
+  /* Warm cream page with faint ruled lines — the ledger/notebook look for
+     report-cover mockups (matches the flip-book pages). */
+  .att-lined-paper {
+    background: repeating-linear-gradient(
+      #f4efe3 0px,
+      #f4efe3 21px,
+      #eae3d3 21px,
+      #eae3d3 22px
+    );
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
