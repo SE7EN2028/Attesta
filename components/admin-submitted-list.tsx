@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { runTranscription } from "@/app/admin/actions";
@@ -28,6 +29,7 @@ type RowState =
   | { status: "error"; error: string };
 
 export function AdminSubmittedList({ initialRows }: { initialRows: Row[] }) {
+  const router = useRouter();
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
 
   async function handleRun(id: string) {
@@ -50,6 +52,9 @@ export function AdminSubmittedList({ initialRows }: { initialRows: Row[] }) {
         speakerCount: result.data.speakerCount,
       },
     }));
+    // Status is now IN_REVIEW — re-fetch so this row moves out of "Submitted"
+    // and into "Ready for report generation" without a manual reload.
+    router.refresh();
   }
 
   if (initialRows.length === 0) {

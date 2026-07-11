@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { runReportGeneration } from "@/app/admin/actions";
 import type { GeneratedReport } from "@/lib/report-generation";
@@ -26,6 +27,7 @@ type RowState =
   | { status: "error"; error: string };
 
 export function AdminReviewList({ initialRows }: { initialRows: Row[] }) {
+  const router = useRouter();
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
 
   async function handleRun(id: string) {
@@ -42,6 +44,9 @@ export function AdminReviewList({ initialRows }: { initialRows: Row[] }) {
       ...prev,
       [id]: { status: "done", report: result.data },
     }));
+    // A DRAFT report now exists — re-fetch so this row moves out of "Ready for
+    // report generation" and into "Completed reports" without a manual reload.
+    router.refresh();
   }
 
   if (initialRows.length === 0) {
