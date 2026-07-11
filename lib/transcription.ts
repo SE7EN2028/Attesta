@@ -127,7 +127,22 @@ async function extractDocx(buffer: Buffer): Promise<string> {
   return value.trim();
 }
 
+// pdfjs (loaded by pdf-parse) references browser globals — DOMMatrix, Path2D,
+// ImageData, DOMPoint — that don't exist in Vercel's serverless Node runtime,
+// which throws "DOMMatrix is not defined". @napi-rs/canvas (bundled with
+// pdf-parse, kept external in next.config) provides them; wire them onto
+// globalThis once before pdf-parse loads.
+async function ensurePdfGlobals(): Promise<void> {
+  const g = globalThis as Record<string, unknown>;
+  if (typeof g.DOMMatrix !== "undefined") return;
+  const canvas = (await import("@napi-rs/canvas")) as unknown as Record<string, unknown>;
+  for (const key of ["DOMMatrix", "Path2D", "ImageData", "DOMPoint"]) {
+    if (typeof g[key] === "undefined" && canvas[key]) g[key] = canvas[key];
+  }
+}
+
 async function extractPdf(buffer: Buffer): Promise<string> {
+  await ensurePdfGlobals();
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
