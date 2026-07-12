@@ -4,7 +4,9 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, setSessionUserId } from "@/lib/session";
+import { getSessionUserId } from "@/lib/session";
+import { generateSignInToken, hashSignInToken } from "@/lib/auth-token";
+import { sendSignInLinkEmail } from "@/lib/email";
 import { extractPlainText, transcribeSourceFile } from "@/lib/transcription";
 import {
   generateComplianceSnapshot,
@@ -37,10 +39,14 @@ const SOURCE_FILE_TYPE_BY_EXTENSION: Record<string, "AUDIO" | "VIDEO" | "DOCX" |
   ".pdf": "PDF",
 };
 
-export async function signUp(input: {
+// Passwordless sign-in: emails a single-use, 20-minute magic link. The User row
+// is NOT created here and NO session is issued — that happens only when the
+// link is verified (app/auth/verify), so possessing the inbox is what proves
+// identity. The companyName is stashed on the token and applied on verify.
+export async function requestSignInLink(input: {
   email: string;
   companyName: string;
-}): Promise<ActionResult<{ id: string; email: string; companyName: string }>> {
+}): Promise<ActionResult<{ email: string }>> {
   const email = input.email.trim().toLowerCase();
   const companyName = input.companyName.trim();
 
@@ -51,18 +57,36 @@ export async function signUp(input: {
     return { ok: false, error: "Company name is required." };
   }
 
-  const user = await prisma.user.upsert({
+  // Cooldown: if a link was issued for this email in the last 45s, don't send
+  // another — prevents email-bombing and avoids leaking whether the address is
+  // known. Still report success.
+  const recent = await prisma.signInToken.findFirst({
     where: { email },
-    update: { companyName },
-    create: { email, companyName },
+    orderBy: { createdAt: "desc" },
+  });
+  if (recent && Date.now() - recent.createdAt.getTime() < 45_000) {
+    return { ok: true, data: { email } };
+  }
+
+  const rawToken = generateSignInToken();
+  const tokenHash = hashSignInToken(rawToken);
+  const expiresAt = new Date(Date.now() + 20 * 60 * 1000);
+
+  // One active link per email.
+  await prisma.signInToken.deleteMany({ where: { email } });
+  await prisma.signInToken.create({
+    data: { tokenHash, email, companyName, expiresAt },
   });
 
-  setSessionUserId(user.id);
+  const url = `${process.env.APP_URL}/auth/verify?token=${rawToken}`;
+  const sent = await sendSignInLinkEmail({ to: email, url });
+  if (!sent.ok) {
+    // Don't leave a dangling link if the email failed to send.
+    await prisma.signInToken.deleteMany({ where: { tokenHash } });
+    return { ok: false, error: "Couldn't send the sign-in email. Try again." };
+  }
 
-  return {
-    ok: true,
-    data: { id: user.id, email: user.email, companyName: user.companyName },
-  };
+  return { ok: true, data: { email } };
 }
 
 export async function createDraftMeetingRequest(input: {

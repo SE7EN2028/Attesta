@@ -21,16 +21,27 @@ function getSecret(): string {
 // httpOnly cookie. Replaces the former raw-userId cookie: the value is now
 // tamper-evident + expiring. Sync (jsonwebtoken) so callers keep their exact
 // signatures — no `await`, no call-site churn.
-export function setSessionUserId(userId: string) {
-  const token = jwt.sign({ sub: userId }, getSecret(), {
+// Cookie attributes for the session token — shared so a route handler can set
+// the same cookie on a NextResponse (redirects need the cookie on the response
+// object, not via next/headers).
+export const SESSION_COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: THIRTY_DAYS_SEC,
+};
+
+// Signs a 30-day session JWT (user id as `sub`). Used by setSessionUserId and
+// directly by the magic-link verify route (which sets it on its redirect
+// response).
+export function createSessionToken(userId: string): string {
+  return jwt.sign({ sub: userId }, getSecret(), {
     expiresIn: THIRTY_DAYS_SEC,
   });
-  cookies().set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: THIRTY_DAYS_SEC,
-  });
+}
+
+export function setSessionUserId(userId: string) {
+  cookies().set(SESSION_COOKIE, createSessionToken(userId), SESSION_COOKIE_OPTS);
 }
 
 // Verifies the session JWT and returns the user id (`sub`), or undefined for a

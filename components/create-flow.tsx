@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   createDraftMeetingRequest,
-  signUp,
+  requestSignInLink,
   submitMeetingRequest,
   uploadSourceFile,
 } from "@/app/create/actions";
@@ -246,9 +246,11 @@ function initialState(
 export function CreateFlow({
   initialUser,
   pastRequests = [],
+  authError,
 }: {
   initialUser: { id: string; email: string; companyName: string } | null;
   pastRequests?: PastRequest[];
+  authError?: string;
 }) {
   const [state, dispatch] = useReducer(reducer, initialUser, initialState);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,12 +258,13 @@ export function CreateFlow({
   const [dragging, setDragging] = useState(false);
   const [draggingSupporting, setDraggingSupporting] = useState(false);
   const [view, setView] = useState<"create" | "requests">("create");
+  const [sentToEmail, setSentToEmail] = useState<string | null>(null);
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
-  async function handleSignUp() {
+  async function handleRequestLink() {
     dispatch({ type: "SET_SUBMITTING", submitting: true });
-    const result = await signUp({
+    const result = await requestSignInLink({
       email: state.email,
       companyName: state.companyName,
     });
@@ -269,7 +272,8 @@ export function CreateFlow({
       dispatch({ type: "SET_ERROR", error: result.error });
       return;
     }
-    dispatch({ type: "SIGNED_UP", user: result.data });
+    dispatch({ type: "SET_SUBMITTING", submitting: false });
+    setSentToEmail(result.data.email);
   }
 
   async function handleCreateDraft() {
@@ -456,45 +460,85 @@ export function CreateFlow({
         <>
       {state.step === 1 && (
         <div className="mt-8 max-w-md">
-          <h1 className="font-serif text-3xl text-cream-100">Sign up</h1>
-          <p className="mt-3 text-[14.5px] text-cream-300">
-            No password needed yet — this just ties your requests to an
-            accountable owner.
-          </p>
+          {sentToEmail ? (
+            <>
+              <h1 className="font-serif text-3xl text-cream-100">
+                Check your email
+              </h1>
+              <p className="mt-3 text-[14.5px] leading-relaxed text-cream-300">
+                We sent a sign-in link to{" "}
+                <span className="text-cream-100">{sentToEmail}</span>. Click it
+                to continue — it&apos;s valid for 20 minutes and can be used
+                once.
+              </p>
+              <div className="mt-8 rounded-md border border-cream-200/10 bg-ink-850 p-6">
+                <p className="text-[13.5px] leading-relaxed text-cream-400">
+                  Didn&apos;t get it? Check spam, or{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSentToEmail(null);
+                      dispatch({ type: "SET_ERROR", error: "" });
+                    }}
+                    className="text-rust-400 underline decoration-rust-400/40 underline-offset-2 hover:text-rust-300"
+                  >
+                    use a different email
+                  </button>
+                  .
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="font-serif text-3xl text-cream-100">Sign in</h1>
+              <p className="mt-3 text-[14.5px] leading-relaxed text-cream-300">
+                No password. We email you a one-time link to verify it&apos;s
+                you — so your requests stay private to your inbox.
+              </p>
 
-          <div className="mt-8 space-y-4 rounded-md border border-cream-200/10 bg-ink-850 p-8">
-            <LabeledInput
-              label="Email"
-              type="email"
-              value={state.email}
-              onChange={(v) =>
-                dispatch({ type: "SET_FIELD", field: "email", value: v })
-              }
-              placeholder="you@company.com"
-            />
-            <LabeledInput
-              label="Company name"
-              value={state.companyName}
-              onChange={(v) =>
-                dispatch({
-                  type: "SET_FIELD",
-                  field: "companyName",
-                  value: v,
-                })
-              }
-              placeholder="Style IT"
-            />
+              {authError && (
+                <p className="mt-4 rounded border border-gold-400/30 bg-gold-400/10 px-4 py-3 text-[13px] text-gold-400">
+                  {authError === "expired"
+                    ? "That sign-in link expired. Request a fresh one below."
+                    : "That sign-in link was invalid. Request a new one below."}
+                </p>
+              )}
 
-            {state.error && <ErrorText>{state.error}</ErrorText>}
+              <div className="mt-8 space-y-4 rounded-md border border-cream-200/10 bg-ink-850 p-8">
+                <LabeledInput
+                  label="Email"
+                  type="email"
+                  value={state.email}
+                  onChange={(v) =>
+                    dispatch({ type: "SET_FIELD", field: "email", value: v })
+                  }
+                  placeholder="you@company.com"
+                />
+                <LabeledInput
+                  label="Company name"
+                  value={state.companyName}
+                  onChange={(v) =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "companyName",
+                      value: v,
+                    })
+                  }
+                  placeholder="Style IT"
+                />
 
-            <Button
-              className="w-full"
-              disabled={!step1Valid || state.submitting}
-              onClick={handleSignUp}
-            >
-              {state.submitting ? "Continuing…" : "Continue"}
-            </Button>
-          </div>
+                {state.error && <ErrorText>{state.error}</ErrorText>}
+
+                <Button
+                  className="w-full"
+                  disabled={!step1Valid || state.submitting}
+                  onClick={handleRequestLink}
+                >
+                  {state.submitting ? "Sending…" : "Email me a sign-in link"}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -8,7 +8,12 @@ import type { PastRequest } from "@/components/past-requests";
 // (in review → ready → sent) reflect the latest without a redeploy.
 export const dynamic = "force-dynamic";
 
-export default async function CreatePage() {
+export default async function CreatePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ auth?: string }>;
+}) {
+  const { auth } = await searchParams;
   const userId = getSessionUserId();
   const user = userId
     ? await prisma.user.findUnique({ where: { id: userId } })
@@ -45,6 +50,7 @@ export default async function CreatePage() {
               : null
           }
           pastRequests={pastRequests}
+          authError={auth}
         />
       </main>
     </>
