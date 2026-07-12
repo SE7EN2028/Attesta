@@ -22,13 +22,14 @@ Attesta's premise: **let AI do the first draft, fast — but never let AI have t
 
 This isn't one app — it's two, deliberately.
 
-### The client side (`/create`, `/try`, `/samples`)
+### The client side (`/create`, `/samples`)
 
 This is what an end user — an HR director, a works-council secretary, a consultancy handling minutes on a client's behalf — actually touches. It's built around one idea from the original product brief: **let someone judge the quality of the output before they commit to anything.**
 
-- **`/create`** is the real, production-shaped flow: sign up → describe the meeting → upload the recording (plus optional supporting documents like prior minutes or policies) → get a **free, instant compliance snapshot** — no payment, no waiting on a human — → then choose a service tier and formally request the full report. That request goes into a queue for human review. This mirrors how the actual product is meant to work: AI drafts, a specialist checks it, then it's delivered.
-- **`/try`** exists for a specific, honest reason: **the real flow above ends in "we'll be in touch," which is correct for production but tells you nothing if you're evaluating whether the pipeline actually works.** `/try` runs the exact same steps — transcription, AI generation — but synchronously, live, so you can watch the whole thing happen end-to-end without waiting for a human review cycle. It's clearly marked as a temporary testing path, not a hidden production feature.
+- **`/create`** is the real, production-shaped flow: sign up → describe the meeting → upload the recording (plus optional supporting documents like prior minutes or policies) → choose a service tier and formally request the full report. That request goes into a queue for human review. This mirrors how the actual product is meant to work: AI drafts, a specialist checks it, then it's delivered. After the request is submitted, the confirmation points to the **admin panel** for anyone who wants to watch the pipeline run end-to-end.
 - **`/samples`** shows a real, already-generated, locked report — not a mockup — so the actual output quality can be judged in under a minute, with zero setup.
+
+Watching the pipeline run live (transcribe → generate → review → lock) happens on the **admin side** below. Because this product is genuinely two-sided, live testing lives in the operator console rather than in a separate throwaway client path.
 
 ### The admin side (`/admin`)
 
@@ -83,7 +84,7 @@ A **"General" region option** exists alongside jurisdiction-specific ones (Franc
 A few decisions worth explaining rather than leaving implicit:
 
 - **AI generation uses Google Gemini.** DeepSeek and Kimi (via NVIDIA NIM) and Groq were all evaluated first — both hit hard, real free-tier limits on realistic transcript sizes (NIM's shared-inference-pool capacity ceiling, Groq's token-per-minute cap). Gemini's free tier handled the actual workload reliably. This is documented as a live engineering decision, not a silent swap.
-- **The compliance snapshot and full report are separate, independently-triggerable steps** — the snapshot is free and instant by design (per the original brief: let someone judge quality before committing), while the full report is the paid, human-reviewed deliverable.
+- **The report generation engine is separable** — a lightweight, findings-only compliance snapshot generator exists alongside the full report path (same transcript, cheaper pass). The current flow ships the full, human-reviewed report as the deliverable; the snapshot generator remains in the engine for reuse rather than being surfaced as its own client step.
 - **The Document Editor only edits report *content*** — never the compliance findings, speaker analytics, or numerical data — keeping the AI-analyzed portions and the human-editable narrative cleanly separated.
 - **Email dispatch (via Brevo)** fires automatically on lock, with a non-blocking failure path: if the email fails to send, the report is still locked and correct — the UI simply shows a retry option, rather than either silently failing or blocking the lock action on a third-party API call.
 

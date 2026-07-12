@@ -39,9 +39,6 @@ export function Nav() {
           <Button asChild size="sm" variant="outline">
             <Link href="/admin">Admin panel</Link>
           </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/try">Try it live</Link>
-          </Button>
           <Button asChild size="sm">
             <Link href="/create">Try the preview</Link>
           </Button>

@@ -2,37 +2,20 @@
 
 import { useReducer, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   createDraftMeetingRequest,
-  runComplianceSnapshot,
   signUp,
   submitMeetingRequest,
   uploadSourceFile,
-  type SnapshotResult,
 } from "@/app/create/actions";
-import { runReportGeneration, runTranscription } from "@/app/admin/actions";
-import { getReportIdForRequest } from "@/app/try/actions";
-import { ComplianceSnapshotView } from "@/components/compliance-snapshot-view";
 
-type Step = 1 | 2 | 3 | "snapshot" | 4 | "done";
+type Step = 1 | 2 | 3 | 4 | "done";
 
 type Tier = "ESSENTIAL" | "SCOPE" | "PREMIUM";
-
-// Flow behaviour after tier selection:
-//  - "request" (default, /create): submit → SUBMITTED → "we'll be in touch".
-//  - "live" (/try demo): submit → transcribe → generate → redirect to report.
-type FlowMode = "request" | "live";
-
-type LiveState =
-  | { phase: "transcribing" }
-  | { phase: "generating" }
-  | { phase: "redirecting" }
-  | { phase: "error"; stage: "submit" | "transcribe" | "generate"; message: string };
 
 type FlowState = {
   step: Step;
@@ -258,23 +241,14 @@ function initialState(
 
 export function CreateFlow({
   initialUser,
-  mode = "request",
 }: {
   initialUser: { id: string; email: string; companyName: string } | null;
-  mode?: FlowMode;
 }) {
   const [state, dispatch] = useReducer(reducer, initialUser, initialState);
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supportingInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [draggingSupporting, setDraggingSupporting] = useState(false);
-  const [live, setLive] = useState<LiveState | null>(null);
-  const [snapshot, setSnapshot] = useState<SnapshotResult | null>(null);
-  const [snapPhase, setSnapPhase] = useState<"idle" | "running" | "error">(
-    "idle"
-  );
-  const [snapError, setSnapError] = useState("");
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
@@ -370,10 +344,6 @@ export function CreateFlow({
 
   async function handleSubmit() {
     if (!state.meetingRequestId || !state.tier) return;
-    if (mode === "live") {
-      runLive("submit");
-      return;
-    }
     dispatch({ type: "SET_SUBMITTING", submitting: true });
     const result = await submitMeetingRequest({
       meetingRequestId: state.meetingRequestId,
@@ -387,77 +357,6 @@ export function CreateFlow({
     dispatch({ type: "SUBMITTED" });
   }
 
-  // Live demo path: run the real pipeline synchronously and land on the
-  // generated report. Resumable — a retry re-enters at the failed stage so a
-  // generation-only failure doesn't re-run Deepgram.
-  async function runLive(from: "submit" | "transcribe" | "generate") {
-    const id = state.meetingRequestId;
-    if (!id || !state.tier) return;
-    let stage: "submit" | "transcribe" | "generate" = from;
-
-    if (stage === "submit") {
-      setLive({ phase: "transcribing" });
-      const s = await submitMeetingRequest({
-        meetingRequestId: id,
-        tier: state.tier,
-        notes: state.notes,
-      });
-      if (!s.ok) {
-        setLive({ phase: "error", stage: "submit", message: s.error });
-        return;
-      }
-      stage = "transcribe";
-    }
-
-    if (stage === "transcribe") {
-      setLive({ phase: "transcribing" });
-      const t = await runTranscription(id);
-      if (!t.ok) {
-        setLive({ phase: "error", stage: "transcribe", message: t.error });
-        return;
-      }
-      stage = "generate";
-    }
-
-    if (stage === "generate") {
-      setLive({ phase: "generating" });
-      // Fail-fast budget for live demo: 90s timeout, 2 attempts (~2 min total)
-      const g = await runReportGeneration(id, {
-        timeoutMs: 90_000,
-        retries: 2,
-      });
-      if (!g.ok) {
-        setLive({ phase: "error", stage: "generate", message: g.error });
-        return;
-      }
-      const r = await getReportIdForRequest(id);
-      if (!r.ok) {
-        setLive({ phase: "error", stage: "generate", message: r.error });
-        return;
-      }
-      setLive({ phase: "redirecting" });
-      router.push(`/report/${r.data.reportId}`);
-    }
-  }
-
-  // Runs the free Instant Compliance Snapshot after upload, before tier. On
-  // success it advances to the read-only snapshot screen; on failure it shows
-  // an error with retry. Shared by /create and /try.
-  async function handleRunSnapshot() {
-    if (!state.meetingRequestId) return;
-    setSnapPhase("running");
-    setSnapError("");
-    const res = await runComplianceSnapshot(state.meetingRequestId);
-    if (!res.ok) {
-      setSnapPhase("error");
-      setSnapError(res.error);
-      return;
-    }
-    setSnapshot(res.data);
-    setSnapPhase("idle");
-    dispatch({ type: "GO_TO", step: "snapshot" });
-  }
-
   const step2Valid =
     state.company.trim() &&
     REGIONS.some((r) => r.live && r.value === state.region) &&
@@ -467,104 +366,6 @@ export function CreateFlow({
     state.outputLanguage;
 
   const step1Valid = state.email.includes("@") && state.companyName.trim();
-
-  if (snapPhase === "running") {
-    return (
-      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <svg
-          className="h-10 w-10 animate-spin text-rust-400"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-        <Eyebrow className="mt-6">Compliance snapshot</Eyebrow>
-        <h1 className="mt-4 max-w-xl font-serif text-3xl text-cream-100 md:text-4xl">
-          Analyzing your meeting…
-        </h1>
-        <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-cream-300">
-          Building your free, read-only compliance snapshot from the recording
-          and any supporting documents — a quick preview before you choose a
-          tier.
-        </p>
-        <p className="mt-3 max-w-md text-[13px] leading-relaxed text-cream-500">
-          Large or complex meetings can take a minute or more to analyze.
-        </p>
-      </Container>
-    );
-  }
-
-  if (snapPhase === "error") {
-    return (
-      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <Eyebrow>Snapshot failed</Eyebrow>
-        <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
-          Couldn&apos;t build the snapshot.
-        </h1>
-        <p className="mt-3 max-w-lg text-[14.5px] leading-relaxed text-rust-400">
-          {snapError}
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={handleRunSnapshot}>Retry</Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setSnapPhase("idle");
-              dispatch({ type: "GO_TO", step: 3 });
-            }}
-          >
-            ← Back to upload
-          </Button>
-        </div>
-      </Container>
-    );
-  }
-
-  if (state.step === "snapshot" && snapshot) {
-    return (
-      <Container>
-        <div>
-          <Eyebrow>Compliance snapshot · free preview</Eyebrow>
-          <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
-            {snapshot.meetingTitle}
-          </h1>
-          <p className="mt-3 max-w-xl text-[15px] text-cream-300">
-            {snapshot.company} · {snapshot.region} · {snapshot.governingBody} ·
-            read-only
-          </p>
-        </div>
-
-        <div className="mt-10">
-          <ComplianceSnapshotView {...snapshot} />
-        </div>
-
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200/10 pt-8">
-          <Button
-            variant="outline"
-            onClick={() => dispatch({ type: "GO_TO", step: 3 })}
-          >
-            ← Back
-          </Button>
-          <Button onClick={() => dispatch({ type: "GO_TO", step: 4 })}>
-            Continue to tier selection →
-          </Button>
-        </div>
-      </Container>
-    );
-  }
 
   if (state.step === "done") {
     return (
@@ -582,88 +383,22 @@ export function CreateFlow({
         <Button asChild className="mt-8">
           <Link href="/">Back to home</Link>
         </Button>
-      </Container>
-    );
-  }
 
-  if (mode === "live" && live) {
-    if (live.phase === "error") {
-      const heading =
-        live.stage === "transcribe"
-          ? "Transcription failed"
-          : live.stage === "generate"
-            ? "Report generation didn't complete"
-            : "Submission failed";
-      const softMessage =
-        live.stage === "generate"
-          ? "The model can be busy right now — this may fail occasionally. Feel free to try again."
-          : live.message;
-      return (
-        <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-          <Eyebrow>Pipeline failed</Eyebrow>
-          <h1 className="mt-4 font-serif text-3xl text-cream-100 md:text-4xl">
-            {heading}
-          </h1>
-          <p className="mt-3 max-w-lg text-[14.5px] leading-relaxed text-rust-400">
-            {softMessage}
+        <div className="mt-10 max-w-md rounded-md border border-gold-400/25 bg-gold-400/5 px-5 py-4 text-left">
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-gold-400">
+            Testing · internal
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button onClick={() => runLive(live.stage)}>Retry</Button>
-            <Button asChild variant="outline">
-              <Link href="/">Back to home</Link>
-            </Button>
-          </div>
-        </Container>
-      );
-    }
-
-    const heading =
-      live.phase === "transcribing"
-        ? "Transcribing your meeting…"
-        : live.phase === "generating"
-          ? "Generating your report — this can take a few minutes…"
-          : "Report ready — opening it now…";
-    const subtext =
-      live.phase === "transcribing"
-        ? "Sending your source to transcription (Deepgram for audio/video, text extraction for documents)."
-        : live.phase === "generating"
-          ? "Drafting the full structured report from the transcript — attendance, agenda, discussion, decisions and votes."
-          : "Taking you straight to your generated report.";
-    return (
-      <Container className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <svg
-          className="h-10 w-10 animate-spin text-rust-400"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-        <Eyebrow className="mt-6">Live pipeline</Eyebrow>
-        <h1 className="mt-4 max-w-xl font-serif text-3xl text-cream-100 md:text-4xl">
-          {heading}
-        </h1>
-        <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-cream-300">
-          {subtext}
-        </p>
-        {live.phase === "generating" && (
-          <p className="mt-3 max-w-md text-[13px] leading-relaxed text-cream-500">
-            Large or complex meetings take longer — a full report can run
-            several minutes.
+          <p className="mt-2 text-[13.5px] leading-relaxed text-cream-300">
+            Want to watch the pipeline run now? Head to the{" "}
+            <Link
+              href="/admin"
+              className="text-rust-400 underline decoration-rust-400/40 underline-offset-2 hover:text-rust-300"
+            >
+              Admin panel
+            </Link>{" "}
+            to transcribe, generate, and view this report live.
           </p>
-        )}
+        </div>
       </Container>
     );
   }
@@ -1043,35 +778,15 @@ export function CreateFlow({
               >
                 ← Back
               </Button>
-              {mode === "live" ? (
-                // /try only: the free snapshot preview is optional — skip
-                // straight to the full report, or run the snapshot first.
-                <>
-                  <Button
-                    variant="outline"
-                    disabled={!state.sourceFile || state.submitting}
-                    onClick={() => dispatch({ type: "GO_TO", step: 4 })}
-                  >
-                    Skip to full report
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    disabled={!state.sourceFile || state.submitting}
-                    onClick={handleRunSnapshot}
-                  >
-                    Get free compliance snapshot →
-                  </Button>
-                </>
-              ) : (
-                // /create: straight to tier + report request, no snapshot.
-                <Button
-                  className="flex-1"
-                  disabled={!state.sourceFile || state.submitting}
-                  onClick={() => dispatch({ type: "GO_TO", step: 4 })}
-                >
-                  Continue →
-                </Button>
-              )}
+              {/* Snapshot removed from the UI — both /create and /try go
+                  straight to tier + full report request. */}
+              <Button
+                className="flex-1"
+                disabled={!state.sourceFile || state.submitting}
+                onClick={() => dispatch({ type: "GO_TO", step: 4 })}
+              >
+                Continue →
+              </Button>
             </div>
           </div>
 
@@ -1139,20 +854,16 @@ export function CreateFlow({
           <div className="mt-6 flex flex-wrap gap-3">
             <Button
               variant="outline"
-              disabled={state.submitting || live !== null}
+              disabled={state.submitting}
               onClick={() => dispatch({ type: "GO_TO", step: 3 })}
             >
               ← Back
             </Button>
             <Button
-              disabled={!state.tier || state.submitting || live !== null}
+              disabled={!state.tier || state.submitting}
               onClick={handleSubmit}
             >
-              {mode === "live"
-                ? "Generate report now →"
-                : state.submitting
-                  ? "Submitting…"
-                  : "Submit request"}
+              {state.submitting ? "Submitting…" : "Submit request"}
             </Button>
           </div>
         </div>
