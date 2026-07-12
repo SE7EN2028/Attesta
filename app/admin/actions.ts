@@ -23,7 +23,7 @@ const LOCKED_BY = "admin";
 
 export async function runTranscription(
   meetingRequestId: string,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; deepgramKey?: string }
 ): Promise<ActionResult<{ rawText: string; speakerCount: number }>> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
@@ -65,7 +65,8 @@ export async function runTranscription(
 
   try {
     const { rawText, speakerLabels, source } = await transcribeSourceFile(
-      primaryFile
+      primaryFile,
+      opts?.deepgramKey
     );
 
     await prisma.transcript.upsert({
@@ -102,7 +103,8 @@ export async function runTranscription(
 
 export async function runReportGeneration(
   meetingRequestId: string,
-  budget?: ReportGenerationBudget
+  budget?: ReportGenerationBudget,
+  geminiKey?: string
 ): Promise<ActionResult<GeneratedReport>> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
@@ -117,7 +119,11 @@ export async function runReportGeneration(
   });
 
   try {
-    const generated = await generateReportContent(meetingRequestId, budget);
+    const generated = await generateReportContent(
+      meetingRequestId,
+      budget,
+      geminiKey
+    );
 
     const report = await prisma.report.upsert({
       where: { meetingRequestId },

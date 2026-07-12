@@ -20,16 +20,21 @@ async function fetchSourceBuffer(storageUrl: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-export async function transcribeSourceFile(sourceFile: {
-  type: string;
-  storageUrl: string;
-}): Promise<TranscriptionResult> {
+export async function transcribeSourceFile(
+  sourceFile: {
+    type: string;
+    storageUrl: string;
+  },
+  // Optional per-run Deepgram key override (admin's own key when the shared key
+  // is rate-limited). Falsy → the DEEPGRAM_API_KEY env default is used.
+  deepgramKey?: string
+): Promise<TranscriptionResult> {
   const buffer = await fetchSourceBuffer(sourceFile.storageUrl);
 
   switch (sourceFile.type) {
     case "AUDIO":
     case "VIDEO":
-      return transcribeWithDeepgram(buffer);
+      return transcribeWithDeepgram(buffer, deepgramKey);
     case "DOCX":
     case "PDF": {
       const rawText = await extractPlainText(buffer, sourceFile.type);
@@ -51,8 +56,11 @@ export async function extractPlainText(
   return type === "DOCX" ? extractDocx(buffer) : extractPdf(buffer);
 }
 
-async function transcribeWithDeepgram(buffer: Buffer): Promise<TranscriptionResult> {
-  const apiKey = process.env.DEEPGRAM_API_KEY;
+async function transcribeWithDeepgram(
+  buffer: Buffer,
+  keyOverride?: string
+): Promise<TranscriptionResult> {
+  const apiKey = keyOverride || process.env.DEEPGRAM_API_KEY;
   if (!apiKey) {
     throw new Error("DEEPGRAM_API_KEY is not set.");
   }

@@ -15,6 +15,7 @@ import {
   SourceFileLinks,
   type SourceFileLink,
 } from "@/components/source-file-links";
+import { useAdminKeys } from "@/components/admin-keys";
 
 export type PipelineRow = {
   meetingRequestId: string;
@@ -74,6 +75,7 @@ export function AdminPipelineList({
   initialRows: PipelineRow[];
 }) {
   const router = useRouter();
+  const { geminiKey, deepgramKey } = useAdminKeys();
   const [ui, setUiState] = useState<Record<string, RowUi>>({});
 
   function patch(id: string, next: Partial<RowUi>) {
@@ -84,7 +86,10 @@ export function AdminPipelineList({
     patch(id, { op: "running", error: undefined });
     // Admin always transcribes fresh (a re-run should re-hit Deepgram); the
     // reuse-existing default is for the /try snapshot→generate path.
-    const result = await runTranscription(id, { force: true });
+    const result = await runTranscription(id, {
+      force: true,
+      deepgramKey: deepgramKey || undefined,
+    });
     if (!result.ok) {
       patch(id, { op: "error", error: result.error });
       return;
@@ -96,7 +101,7 @@ export function AdminPipelineList({
 
   async function handleGenerate(id: string) {
     patch(id, { op: "running", error: undefined });
-    const result = await runReportGeneration(id);
+    const result = await runReportGeneration(id, undefined, geminiKey || undefined);
     if (!result.ok) {
       patch(id, { op: "error", error: result.error });
       return;

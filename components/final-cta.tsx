@@ -6,10 +6,7 @@ export function FinalCta() {
   return (
     <section className="border-t border-cream-200/10 py-24 md:py-32">
       <Container className="text-center">
-        <div className="inline-block -rotate-3 rounded-xs border-2 border-rust-400 px-3.5 py-[7px] font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-rust-400">
-          Free to use · No card
-        </div>
-        <h2 className="mx-auto mt-5 max-w-2xl font-serif text-3xl leading-[1.15] text-cream-100 md:text-[44px]">
+        <h2 className="mx-auto max-w-2xl font-serif text-3xl leading-[1.15] text-cream-100 md:text-[44px]">
           Raw recordings in.
           <br />
           Signed minutes out.

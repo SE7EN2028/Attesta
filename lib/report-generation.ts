@@ -83,7 +83,8 @@ export type ReportGenerationBudget = {
 
 export async function generateReportContent(
   meetingRequestId: string,
-  budget?: ReportGenerationBudget
+  budget?: ReportGenerationBudget,
+  geminiKey?: string
 ): Promise<GeneratedReport> {
   const meetingRequest = await prisma.meetingRequest.findUnique({
     where: { id: meetingRequestId },
@@ -151,7 +152,8 @@ export async function generateReportContent(
     prompt,
     prompts.resolve("system"),
     budget,
-    validateShape
+    validateShape,
+    geminiKey
   );
   const generated: GeneratedReport = { ...validated, generatedBy: "gemini" };
   // Guarantee no compliance findings for General regardless of what the model
@@ -341,8 +343,10 @@ function resolveModels(): string[] {
 }
 const GEMINI_MODELS = resolveModels();
 
-function resolveGeminiApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY;
+function resolveGeminiApiKey(override?: string): string {
+  // A per-run override (admin's own key when the shared key is rate-limited)
+  // wins; falsy → the GEMINI_API_KEY env default.
+  const apiKey = override || process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not set.");
   }
@@ -409,9 +413,10 @@ async function callModelForJson<T>(
   prompt: string,
   systemPrompt: string,
   budget: ReportGenerationBudget | undefined,
-  validate: (parsed: unknown) => T
+  validate: (parsed: unknown) => T,
+  apiKeyOverride?: string
 ): Promise<T> {
-  const apiKey = resolveGeminiApiKey();
+  const apiKey = resolveGeminiApiKey(apiKeyOverride);
   const maxAttempts = budget?.retries ?? TRANSIENT_RETRY_ATTEMPTS;
   const timeoutMs = budget?.timeoutMs ?? PROVIDER_TIMEOUT_MS;
 

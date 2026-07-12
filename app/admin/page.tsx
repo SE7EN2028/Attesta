@@ -8,6 +8,7 @@ import {
   AdminPipelineList,
   type PipelineRow,
 } from "@/components/admin-pipeline-list";
+import { AdminKeysProvider, AdminKeysPanel } from "@/components/admin-keys";
 
 // Reads live meeting requests / reports from the DB — must render per-request,
 // not be prerendered static (which freezes it to a build-time snapshot).
@@ -108,9 +109,14 @@ export default async function AdminPage() {
             lock — without moving between lists.
           </p>
 
-          <div className="mt-10">
-            <AdminPipelineList initialRows={rows} />
-          </div>
+          <AdminKeysProvider>
+            <div className="mt-8">
+              <AdminKeysPanel />
+            </div>
+            <div className="mt-6">
+              <AdminPipelineList initialRows={rows} />
+            </div>
+          </AdminKeysProvider>
         </Container>
       </main>
     </>
