@@ -1,6 +1,7 @@
 "use server";
 
 import path from "path";
+import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId, setSessionUserId } from "@/lib/session";
@@ -264,6 +265,10 @@ export async function submitMeetingRequest(input: {
     where: { id: meetingRequestId },
     data: { tier, notes: notes.trim() || null, status: "SUBMITTED" },
   });
+
+  // Invalidate the admin router cache so a newly submitted request shows up
+  // there on navigation without a manual hard refresh.
+  revalidatePath("/admin");
 
   return { ok: true, data: { id: updated.id } };
 }
