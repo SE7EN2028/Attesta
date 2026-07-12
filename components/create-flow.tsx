@@ -12,6 +12,10 @@ import {
   submitMeetingRequest,
   uploadSourceFile,
 } from "@/app/create/actions";
+import {
+  PastRequestsList,
+  type PastRequest,
+} from "@/components/past-requests";
 
 type Step = 1 | 2 | 3 | 4 | "done";
 
@@ -241,14 +245,17 @@ function initialState(
 
 export function CreateFlow({
   initialUser,
+  pastRequests = [],
 }: {
   initialUser: { id: string; email: string; companyName: string } | null;
+  pastRequests?: PastRequest[];
 }) {
   const [state, dispatch] = useReducer(reducer, initialUser, initialState);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supportingInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [draggingSupporting, setDraggingSupporting] = useState(false);
+  const [view, setView] = useState<"create" | "requests">("create");
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
@@ -405,13 +412,48 @@ export function CreateFlow({
 
   return (
     <Container>
-      <div className="flex items-center justify-between">
-        <Eyebrow>Create your report</Eyebrow>
-        <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500">
-          Step {numericStep} / 4
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {pastRequests.length > 0 ? (
+          <div className="flex items-center gap-5">
+            <button
+              type="button"
+              onClick={() => setView("create")}
+              className={cn(
+                "font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
+                view === "create"
+                  ? "text-rust-400"
+                  : "text-cream-500 hover:text-cream-300"
+              )}
+            >
+              Create your report
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("requests")}
+              className={cn(
+                "font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
+                view === "requests"
+                  ? "text-rust-400"
+                  : "text-cream-500 hover:text-cream-300"
+              )}
+            >
+              Your requests ({pastRequests.length})
+            </button>
+          </div>
+        ) : (
+          <Eyebrow>Create your report</Eyebrow>
+        )}
+        {view === "create" && (
+          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500">
+            Step {numericStep} / 4
+          </p>
+        )}
       </div>
 
+      {view === "requests" ? (
+        <PastRequestsList requests={pastRequests} />
+      ) : (
+        <>
       {state.step === 1 && (
         <div className="mt-8 max-w-md">
           <h1 className="font-serif text-3xl text-cream-100">Sign up</h1>
@@ -867,6 +909,8 @@ export function CreateFlow({
             </Button>
           </div>
         </div>
+      )}
+        </>
       )}
     </Container>
   );
