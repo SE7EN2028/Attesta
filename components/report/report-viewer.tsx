@@ -50,6 +50,29 @@ export function ReportViewer({
   const [spread, setSpread] = useState(0);
   const [flip, setFlip] = useState<FlipState>(null);
 
+  // Read-aloud (Listen) — plays the executive summary via the /listen route.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioState, setAudioState] = useState<
+    "idle" | "loading" | "playing" | "paused" | "error"
+  >("idle");
+  const toggleListen = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audioState === "playing") {
+      audio.pause();
+      return;
+    }
+    if (audioState === "paused") {
+      void audio.play();
+      return;
+    }
+    // idle | error: (re)start playback from the route.
+    if (!audio.src) audio.src = `/api/report/${reportId}/listen`;
+    if (audioState === "error") audio.load();
+    setAudioState("loading");
+    void audio.play().catch(() => setAudioState("error"));
+  }, [audioState, reportId]);
+
   const leafRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
@@ -255,9 +278,36 @@ export function ReportViewer({
               </Link>
             </Button>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleListen}
+            disabled={audioState === "loading"}
+          >
+            {audioState === "loading"
+              ? "Preparing…"
+              : audioState === "playing"
+                ? "Pause"
+                : audioState === "paused"
+                  ? "Resume"
+                  : audioState === "error"
+                    ? "Unavailable"
+                    : "Listen"}
+          </Button>
           <Button asChild variant="primary" size="sm">
             <a href={`/api/report/${reportId}/pptx`}>Download deck (.pptx)</a>
           </Button>
+          <audio
+            ref={audioRef}
+            className="hidden"
+            onPlaying={() => setAudioState("playing")}
+            onPause={() =>
+              setAudioState((s) => (s === "playing" ? "paused" : s))
+            }
+            onEnded={() => setAudioState("idle")}
+            onError={() => setAudioState("error")}
+          />
         </div>
       </div>
 
