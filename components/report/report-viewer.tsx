@@ -220,7 +220,9 @@ export function ReportViewer({
       ? { front: 2 * spread + 1, back: 2 * spread + 2, side: "right" as const }
       : { front: 2 * spread, back: 2 * spread - 1, side: "left" as const });
 
-  function face(idx: number) {
+  // variant "stage": fills the fixed-height flip-book (scrolls if overflowing).
+  // variant "flow": full-width, natural height — used in the mobile page stack.
+  function face(idx: number, variant: "stage" | "flow" = "stage") {
     const page = pages[idx] ?? null;
     if (!page) {
       return (
@@ -230,7 +232,13 @@ export function ReportViewer({
       );
     }
     return (
-      <div className="flex h-full w-full flex-col overflow-y-auto bg-paper-500 p-8 text-slate-900">
+      <div
+        className={
+          variant === "stage"
+            ? "flex h-full w-full flex-col overflow-y-auto bg-paper-500 p-8 text-slate-900"
+            : "flex w-full flex-col bg-paper-500 p-6 text-slate-900"
+        }
+      >
         <div className="flex shrink-0 items-center justify-between">
           <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-slate-500">
             {page.label}
@@ -319,6 +327,8 @@ export function ReportViewer({
         </div>
       </div>
 
+      {/* Desktop / tablet: interactive flip-book */}
+      <div className="hidden md:block">
       <div
         ref={stageRef}
         onPointerDown={onPointerDown}
@@ -403,6 +413,20 @@ export function ReportViewer({
         >
           →
         </button>
+      </div>
+      </div>
+
+      {/* Mobile: pages stacked vertically, full width, natural height — the
+          flip-book's two-page spread is unreadable on a phone. */}
+      <div className="mt-8 space-y-5 md:hidden">
+        {pages.map((_, i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-md shadow-[0_0_0_1px_rgba(26,34,46,0.12)]"
+          >
+            {face(i, "flow")}
+          </div>
+        ))}
       </div>
     </Container>
   );
