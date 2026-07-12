@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { transcribeSourceFile } from "@/lib/transcription";
+import { synthesizeSummaryAudio } from "@/lib/tts";
 import { sendReportReadyEmail } from "@/lib/email";
 import {
   generateReportContent,
@@ -135,6 +137,9 @@ export async function runReportGeneration(
         numericalData: generated.numericalData,
         generatedBy: generated.generatedBy,
         status: "DRAFT",
+        // Clear any stale pre-generated audio; it's re-created below from the
+        // fresh summary (so a re-gen whose TTS fails doesn't serve old audio).
+        summaryAudioUrl: null,
       },
       create: {
         meetingRequestId,
@@ -170,6 +175,35 @@ export async function runReportGeneration(
       where: { id: meetingRequestId },
       data: { status: "IN_REVIEW" },
     });
+
+    // Pre-generate the executive-summary audio so the report viewer's "Listen"
+    // plays instantly instead of synthesizing on click. Best-effort: never fail
+    // generation on a TTS/storage error — the /listen route synthesizes on
+    // demand as a fallback. Overwrites the same Blob path on re-generation.
+    const summary = generated.content.executiveSummary?.trim();
+    if (summary) {
+      try {
+        const audio = await synthesizeSummaryAudio(
+          summary,
+          meetingRequest.outputLanguage
+        );
+        const { url } = await put(`report-tts/${report.id}.mp3`, audio, {
+          access: "public",
+          addRandomSuffix: false,
+          allowOverwrite: true,
+        });
+        await prisma.report.update({
+          where: { id: report.id },
+          data: { summaryAudioUrl: url },
+        });
+      } catch (error) {
+        console.error(
+          `[report-generation] summary TTS pre-generation failed for report ${report.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
 
     return { ok: true, data: generated };
   } catch (error) {

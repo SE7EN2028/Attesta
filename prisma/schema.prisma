@@ -90,6 +90,11 @@ model Report {
   // "deepseek" | "nim" | "groq" from before the provider swap.
   generatedBy      String? // "gemini" (legacy: "deepseek" | "nim" | "groq")
   status           String // "DRAFT" | "LOCKED"
+  // Pre-generated executive-summary text-to-speech (Vercel Blob URL), produced
+  // at generation time so the report viewer's "Listen" plays instantly instead
+  // of synthesizing on click. Null = synthesize on demand (old rows / TTS
+  // failed); the /listen route caches into this on first play.
+  summaryAudioUrl  String?
   lockedAt         DateTime?
   lockedBy         String?
   dispatchedAt     DateTime?

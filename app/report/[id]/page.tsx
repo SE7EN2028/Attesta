@@ -61,6 +61,7 @@ export default async function ReportPage({
           status={report.status}
           generatedBy={report.generatedBy}
           region={report.meetingRequest.region}
+          listenSrc={report.summaryAudioUrl ?? undefined}
         />
       </main>
     </>
