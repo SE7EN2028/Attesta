@@ -106,6 +106,22 @@ export default async function AdminPage() {
   return (
     <>
       <Nav />
+
+      {/* Persistent temporary/testing notice — this operator console is not a
+          customer-facing surface. */}
+      <div className="border-b border-gold-400/30 bg-gold-400/10">
+        <Container className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3">
+          <span className="shrink-0 rounded-full border border-gold-400/50 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gold-400">
+            Admin only · testing
+          </span>
+          <p className="text-[13.5px] leading-relaxed text-cream-300">
+            This is the internal admin / operator console — temporarily exposed
+            here for testing the pipeline. It is not a customer-facing surface
+            and isn&apos;t access-gated yet.
+          </p>
+        </Container>
+      </div>
+
       <main className="min-h-screen bg-ink-900 py-16">
         <Container>
           <div className="flex flex-wrap items-start justify-between gap-4">
