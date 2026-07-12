@@ -12,7 +12,7 @@ import { isRenderableReportContent } from "@/lib/report-generation";
 // Shared by /samples and the landing page's #sample-report section so both
 // show the same real report.
 export const SAMPLE_REPORT_ID =
-  process.env.SAMPLE_REPORT_ID ?? "cmrdo676y0000dfv76xrnwj0p";
+  process.env.SAMPLE_REPORT_ID ?? "cmrgu0x9f0002h6v79se2qa6h";
 
 export async function findSampleReport() {
   const locked = await prisma.report.findMany({

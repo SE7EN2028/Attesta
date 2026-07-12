@@ -23,6 +23,7 @@ export function ReportViewer({
   status,
   generatedBy,
   region,
+  listenSrc,
 }: {
   reportId: string;
   content: ReportContent;
@@ -32,6 +33,10 @@ export function ReportViewer({
   status: string;
   generatedBy: string | null;
   region?: string;
+  // Optional pre-generated audio URL for the executive-summary read-aloud. When
+  // set (e.g. the pinned /samples report → a static file), it's preloaded so
+  // playback starts instantly instead of synthesizing on click.
+  listenSrc?: string;
 }) {
   // General reports have no compliance audit — hide its entry point. Fall back
   // to the region embedded in the report content when not passed explicitly.
@@ -66,12 +71,13 @@ export function ReportViewer({
       void audio.play();
       return;
     }
-    // idle | error: (re)start playback from the route.
-    if (!audio.src) audio.src = `/api/report/${reportId}/listen`;
+    // idle | error: (re)start playback. Prefer the preloaded static source when
+    // provided; otherwise synthesize on demand via the route.
+    if (!audio.src) audio.src = listenSrc ?? `/api/report/${reportId}/listen`;
     if (audioState === "error") audio.load();
     setAudioState("loading");
     void audio.play().catch(() => setAudioState("error"));
-  }, [audioState, reportId]);
+  }, [audioState, reportId, listenSrc]);
 
   const leafRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -301,6 +307,8 @@ export function ReportViewer({
           <audio
             ref={audioRef}
             className="hidden"
+            src={listenSrc}
+            preload={listenSrc ? "auto" : "none"}
             onPlaying={() => setAudioState("playing")}
             onPause={() =>
               setAudioState((s) => (s === "playing" ? "paused" : s))

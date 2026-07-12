@@ -75,6 +75,7 @@ export default async function SamplesPage() {
             status={report.status}
             generatedBy={report.generatedBy}
             region={report.meetingRequest.region}
+            listenSrc="/sample-listen.mp3"
           />
         </div>
       </main>
