@@ -475,11 +475,21 @@ export function CreateFlow({
         ) : (
           <Eyebrow>Create your report</Eyebrow>
         )}
-        {view === "create" && (
-          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500">
-            Step {numericStep} / 4
-          </p>
-        )}
+        <div className="flex items-center gap-4">
+          {view === "create" && (
+            <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500">
+              Step {numericStep} / 4
+            </p>
+          )}
+          {initialUser && (
+            <a
+              href="/api/signout"
+              className="font-mono text-[11px] uppercase tracking-[0.14em] text-cream-500 transition-colors hover:text-rust-300"
+            >
+              Sign out
+            </a>
+          )}
+        </div>
       </div>
 
       {view === "requests" ? (
