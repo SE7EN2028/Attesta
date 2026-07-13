@@ -104,17 +104,22 @@ model Report {
   complianceFindings ComplianceFinding[]
 }
 
-// Single-use, expiring magic-link tokens for passwordless email sign-in. Only
-// the SHA-256 hash of the token is stored (a DB leak exposes no usable link).
-// The pending user's companyName rides along so the User row is created only on
-// verification. Consumed (deleted) on successful sign-in.
+// Single-use, expiring magic-link sign-in. Only SHA-256 hashes are stored (a DB
+// leak exposes no usable link). Supports cross-device sign-in (WhatsApp/Slack
+// style): the requesting device holds `pendingHash` (as a cookie) + shows
+// `code`; the device that opens the emailed link confirms the same `code` and
+// sets `approvedUserId`; the original device then claims the session by polling
+// with its pendingHash. Consumed (deleted) once claimed, or on expiry.
 model SignInToken {
-  id          String   @id @default(cuid())
-  tokenHash   String   @unique
-  email       String
-  companyName String
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  tokenHash      String   @unique
+  pendingHash    String?  @unique
+  code           String?
+  email          String
+  companyName    String
+  approvedUserId String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
 }
 
 model ComplianceFinding {

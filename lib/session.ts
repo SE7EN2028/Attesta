@@ -2,6 +2,9 @@ import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
 export const SESSION_COOKIE = "attesta_uid";
+// Held by the device that REQUESTED sign-in; used to claim the session once the
+// emailed link is confirmed (possibly on another device).
+export const PENDING_COOKIE = "attesta_pending";
 
 const THIRTY_DAYS_SEC = 60 * 60 * 24 * 30;
 

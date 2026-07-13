@@ -4,8 +4,17 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session";
-import { generateSignInToken, hashSignInToken } from "@/lib/auth-token";
+import { cookies } from "next/headers";
+import {
+  getSessionUserId,
+  setSessionUserId,
+  PENDING_COOKIE,
+} from "@/lib/session";
+import {
+  generateSignInToken,
+  hashSignInToken,
+  generateMatchCode,
+} from "@/lib/auth-token";
 import { sendSignInLinkEmail } from "@/lib/email";
 import { extractPlainText, transcribeSourceFile } from "@/lib/transcription";
 import {
@@ -46,7 +55,7 @@ const SOURCE_FILE_TYPE_BY_EXTENSION: Record<string, "AUDIO" | "VIDEO" | "DOCX" |
 export async function requestSignInLink(input: {
   email: string;
   companyName: string;
-}): Promise<ActionResult<{ email: string }>> {
+}): Promise<ActionResult<{ email: string; code: string }>> {
   const email = input.email.trim().toLowerCase();
   const companyName = input.companyName.trim();
 
@@ -59,23 +68,26 @@ export async function requestSignInLink(input: {
 
   // Cooldown: if a link was issued for this email in the last 45s, don't send
   // another — prevents email-bombing and avoids leaking whether the address is
-  // known. Still report success.
+  // known. Return the existing code so this device shows the right one.
   const recent = await prisma.signInToken.findFirst({
     where: { email },
     orderBy: { createdAt: "desc" },
   });
   if (recent && Date.now() - recent.createdAt.getTime() < 45_000) {
-    return { ok: true, data: { email } };
+    return { ok: true, data: { email, code: recent.code ?? "" } };
   }
 
   const rawToken = generateSignInToken();
   const tokenHash = hashSignInToken(rawToken);
+  const rawPending = generateSignInToken();
+  const pendingHash = hashSignInToken(rawPending);
+  const code = generateMatchCode();
   const expiresAt = new Date(Date.now() + 20 * 60 * 1000);
 
   // One active link per email.
   await prisma.signInToken.deleteMany({ where: { email } });
   await prisma.signInToken.create({
-    data: { tokenHash, email, companyName, expiresAt },
+    data: { tokenHash, pendingHash, code, email, companyName, expiresAt },
   });
 
   const url = `${process.env.APP_URL}/auth/verify?token=${rawToken}`;
@@ -86,7 +98,50 @@ export async function requestSignInLink(input: {
     return { ok: false, error: "Couldn't send the sign-in email. Try again." };
   }
 
-  return { ok: true, data: { email } };
+  // This (requesting) device holds the pending handle so it can claim the
+  // session once the link is confirmed — even if confirmed on another device.
+  cookies().set(PENDING_COOKIE, rawPending, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 20 * 60,
+  });
+
+  return { ok: true, data: { email, code } };
+}
+
+// Approves a magic-link token — called ONLY from the "Continue" button on the
+// verify interstitial (never on a bare GET, so email-scanner prefetches can't
+// burn the link). Signs in THIS device immediately (same-device sign-in) AND
+// marks the pending sign-in approved so the original device can claim it by
+// polling. The record is deleted when claimed (or on expiry).
+export async function completeSignIn(
+  token: string
+): Promise<ActionResult<{ email: string; code: string | null }>> {
+  if (!token) return { ok: false, error: "Missing sign-in token." };
+
+  const row = await prisma.signInToken.findUnique({
+    where: { tokenHash: hashSignInToken(token) },
+  });
+  if (!row || row.expiresAt.getTime() < Date.now()) {
+    if (row) {
+      await prisma.signInToken.delete({ where: { id: row.id } }).catch(() => {});
+    }
+    return { ok: false, error: "This sign-in link expired. Request a new one." };
+  }
+
+  const user = await prisma.user.upsert({
+    where: { email: row.email },
+    update: { companyName: row.companyName },
+    create: { email: row.email, companyName: row.companyName },
+  });
+  await prisma.signInToken.update({
+    where: { id: row.id },
+    data: { approvedUserId: user.id },
+  });
+
+  setSessionUserId(user.id);
+  return { ok: true, data: { email: user.email, code: row.code } };
 }
 
 export async function createDraftMeetingRequest(input: {

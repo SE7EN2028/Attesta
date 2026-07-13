@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { Container } from "@/components/container";
 import { Eyebrow } from "@/components/eyebrow";
@@ -259,6 +259,33 @@ export function CreateFlow({
   const [draggingSupporting, setDraggingSupporting] = useState(false);
   const [view, setView] = useState<"create" | "requests">("create");
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
+  const [signInCode, setSignInCode] = useState<string | null>(null);
+
+  // While the "check your email" screen is up, poll for sign-in completion so
+  // THIS original tab auto-continues to /create once the user finishes signing
+  // in via the emailed link (same browser, shared cookie). Also re-checks when
+  // the tab regains focus (e.g. after switching back from the email tab).
+  useEffect(() => {
+    if (!sentToEmail) return;
+    let active = true;
+    const check = async () => {
+      try {
+        const res = await fetch("/api/session", { cache: "no-store" });
+        const data = await res.json();
+        if (active && data.signedIn) window.location.href = "/create";
+      } catch {
+        // ignore transient poll errors
+      }
+    };
+    const id = setInterval(check, 3000);
+    window.addEventListener("focus", check);
+    check();
+    return () => {
+      active = false;
+      clearInterval(id);
+      window.removeEventListener("focus", check);
+    };
+  }, [sentToEmail]);
 
   const numericStep = state.step === "done" ? 4 : state.step;
 
@@ -274,6 +301,7 @@ export function CreateFlow({
     }
     dispatch({ type: "SET_SUBMITTING", submitting: false });
     setSentToEmail(result.data.email);
+    setSignInCode(result.data.code || null);
   }
 
   async function handleCreateDraft() {
@@ -467,17 +495,34 @@ export function CreateFlow({
               </h1>
               <p className="mt-3 text-[14.5px] leading-relaxed text-cream-300">
                 We sent a sign-in link to{" "}
-                <span className="text-cream-100">{sentToEmail}</span>. Click it
-                to continue — it&apos;s valid for 20 minutes and can be used
-                once.
+                <span className="text-cream-100">{sentToEmail}</span>. Open it on
+                any device — it&apos;s valid for 20 minutes. You&apos;ll be
+                signed in here automatically once it&apos;s confirmed.
               </p>
-              <div className="mt-8 rounded-md border border-cream-200/10 bg-ink-850 p-6">
+
+              {signInCode && (
+                <div className="mt-8 rounded-md border border-gold-400/25 bg-gold-400/5 p-6">
+                  <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-gold-400">
+                    Your sign-in code
+                  </p>
+                  <p className="mt-3 font-mono text-4xl tracking-[0.35em] text-cream-100">
+                    {signInCode}
+                  </p>
+                  <p className="mt-3 text-[13px] leading-relaxed text-cream-400">
+                    When you open the link, make sure the page shows this same
+                    code before you confirm.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-6 rounded-md border border-cream-200/10 bg-ink-850 p-6">
                 <p className="text-[13.5px] leading-relaxed text-cream-400">
                   Didn&apos;t get it? Check spam, or{" "}
                   <button
                     type="button"
                     onClick={() => {
                       setSentToEmail(null);
+                      setSignInCode(null);
                       dispatch({ type: "SET_ERROR", error: "" });
                     }}
                     className="text-rust-400 underline decoration-rust-400/40 underline-offset-2 hover:text-rust-300"
