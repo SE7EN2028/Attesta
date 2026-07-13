@@ -444,50 +444,50 @@ export function CreateFlow({
 
   return (
     <Container>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         {pastRequests.length > 0 ? (
-          <div className="flex items-center gap-5">
+          <div className="inline-flex rounded-full border border-cream-200/15 bg-ink-850 p-1">
             <button
               type="button"
               onClick={() => setView("create")}
               className={cn(
-                "font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
+                "rounded-full px-4 py-1.5 text-[12.5px] font-medium transition-colors",
                 view === "create"
-                  ? "text-rust-400"
-                  : "text-cream-500 hover:text-cream-300"
+                  ? "bg-cream-200/10 text-cream-100"
+                  : "text-cream-400 hover:text-cream-200"
               )}
             >
-              Create your report
+              Create report
             </button>
             <button
               type="button"
               onClick={() => setView("requests")}
               className={cn(
-                "font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
+                "flex items-center gap-2 rounded-full px-4 py-1.5 text-[12.5px] font-medium transition-colors",
                 view === "requests"
-                  ? "text-rust-400"
-                  : "text-cream-500 hover:text-cream-300"
+                  ? "bg-cream-200/10 text-cream-100"
+                  : "text-cream-400 hover:text-cream-200"
               )}
             >
-              Your requests ({pastRequests.length})
+              Your requests
+              <span className="rounded-full bg-rust-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-paper-100">
+                {pastRequests.length}
+              </span>
             </button>
           </div>
         ) : (
           <Eyebrow>Create your report</Eyebrow>
         )}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {view === "create" && (
-            <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500">
+            <p className="hidden font-mono text-[11px] uppercase tracking-[0.1em] text-cream-500 sm:block">
               Step {numericStep} / 4
             </p>
           )}
           {initialUser && (
-            <a
-              href="/api/signout"
-              className="font-mono text-[11px] uppercase tracking-[0.14em] text-cream-500 transition-colors hover:text-rust-300"
-            >
-              Sign out
-            </a>
+            <Button asChild variant="outline" size="sm">
+              <a href="/api/signout">Sign out</a>
+            </Button>
           )}
         </div>
       </div>
